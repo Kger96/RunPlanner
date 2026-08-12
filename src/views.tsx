@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Footprints, Plus, SkipForward, Trophy, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Footprints, Pencil, Plus, SkipForward, Trophy, X } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { calculateDashboard, daysUntilRace, formatDate, formatDuration, formatPace, getPlanWeekRange, isoDate, weekStart } from "./domain";
 import type { GoalInput, PlannerState, RunInput, Session, SessionInput } from "./types";
@@ -82,8 +82,88 @@ export function RunLogView({ state, onState, onError, openEntry, onEntryOpened }
   return <section className="run-log"><div className="list-header"><div><p className="eyebrow">ACTIVITY HISTORY</p><h2>Every effort counts.</h2></div><button onClick={() => setEntryOpen(true)}><Plus size={17} />Log a run</button></div>{state.runs.length ? <ul className="run-list">{state.runs.map((run) => <li key={run.id}><div className="activity-icon"><Footprints size={18} /></div><div><strong>{run.is_unplanned ? "Unplanned run" : "Planned workout"}</strong><span>{formatDate(run.completed_date, "long")} · {run.distance_km.toFixed(1)} km · {formatDuration(run.duration_seconds)}</span>{run.notes && <p>{run.notes}</p>}</div><div className="run-stat"><strong>{formatPace(run.distance_km, run.duration_seconds)}</strong><span>/km</span></div></li>)}</ul> : <EmptyState title="No runs logged" body="Use Log a run to record a planned or unplanned activity." action={() => setEntryOpen(true)} actionLabel="Log a run" />}{entryOpen && <RunEntryPanel onClose={() => setEntryOpen(false)} onState={onState} onError={onError} />}</section>;
 }
 
-export function GoalHistoryView({ state, onCreate }: { state: PlannerState; onCreate: () => void }) {
-  return <section className="history"><div className="list-header"><div><p className="eyebrow">GOALS</p><h2>Goal and plan history</h2></div>{!state.activeGoal && <button onClick={onCreate}>Create goal</button>}</div>{state.goals.length ? <ul className="goal-list">{state.goals.map((goal) => <li key={goal.id}><div><span className={goal.active ? "pill active-pill" : "pill"}>{goal.active ? "Active" : "Archived"}</span><h3>{goal.name}</h3><p>{goal.distance_km} km · {formatDate(goal.race_date, "long")}{goal.target_time && ` · Target ${goal.target_time}`}</p></div><Trophy size={24} aria-hidden="true" /></li>)}</ul> : <EmptyState title="No goals yet" body="Your first race goal will anchor your training plan." action={onCreate} actionLabel="Create goal" />}</section>;
+export function GoalHistoryView({ state, onCreate, onState, onError }: { state: PlannerState; onCreate: () => void; onState: (state: PlannerState) => void; onError: (message: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editPlanStartDate, setEditPlanStartDate] = useState("");
+  const [editRaceDate, setEditRaceDate] = useState("");
+  const [editDistanceKm, setEditDistanceKm] = useState("");
+  const [editTargetTime, setEditTargetTime] = useState("");
+  const [editError, setEditError] = useState("");
+
+  function startEdit() {
+    const goal = state.activeGoal!;
+    setEditName(goal.name);
+    setEditPlanStartDate(goal.plan_start_date || "");
+    setEditRaceDate(goal.race_date);
+    setEditDistanceKm(String(goal.distance_km));
+    setEditTargetTime(goal.target_time || "");
+    setEditError("");
+    setEditing(true);
+  }
+
+  async function cancelPlan() {
+    if (!window.confirm("Permanently delete the active plan and all associated sessions and runs? This cannot be undone.")) return;
+    try { onState(await window.trainingPlanner.cancelPlan()); }
+    catch (error) { onError(error instanceof Error ? error.message : "The plan could not be cancelled."); }
+  }
+
+  async function savePlan(event: React.FormEvent) {
+    event.preventDefault();
+    const goal = state.activeGoal!;
+    const startChanged = editPlanStartDate !== (goal.plan_start_date || "");
+    const endChanged = editRaceDate !== goal.race_date;
+    if (startChanged || endChanged) {
+      const outsideSessions = state.sessions.filter((s) =>
+        s.goal_id === goal.id && ((editPlanStartDate && s.scheduled_date < editPlanStartDate) || s.scheduled_date > editRaceDate)
+      );
+      if (outsideSessions.length > 0 && !window.confirm("Some planned sessions and logged activities fall outside the new date range and will be permanently deleted. Continue?")) return;
+    }
+    try {
+      onState(await window.trainingPlanner.editPlan({ id: goal.id, name: editName, raceDate: editRaceDate, planStartDate: editPlanStartDate || undefined, distanceKm: Number(editDistanceKm), targetTime: editTargetTime || undefined }));
+      setEditing(false);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "The plan could not be updated.";
+      setEditError(msg);
+      onError(msg);
+    }
+  }
+
+  return <section className="history">
+    <div className="list-header"><div><p className="eyebrow">GOALS</p><h2>Goal and plan history</h2></div>{!state.activeGoal && <button onClick={onCreate}>Create goal</button>}</div>
+    {state.goals.length
+      ? <ul className="goal-list">{state.goals.map((goal) =>
+          <li key={goal.id} className={goal.active && editing ? "editing" : ""}>
+            {goal.active && editing
+              ? <form className="edit-plan-form" onSubmit={savePlan}>
+                  <label>Goal name<input value={editName} onChange={(e) => setEditName(e.target.value)} required /></label>
+                  <div className="field-row">
+                    <label>Plan start date<input type="date" value={editPlanStartDate} onChange={(e) => setEditPlanStartDate(e.target.value)} /></label>
+                    <label>Race date<input type="date" value={editRaceDate} onChange={(e) => setEditRaceDate(e.target.value)} required /></label>
+                  </div>
+                  <div className="field-row">
+                    <label>Distance (km)<input type="number" min="0.1" step="0.1" value={editDistanceKm} onChange={(e) => setEditDistanceKm(e.target.value)} required /></label>
+                    <label>Target time <span className="optional">Optional</span><input value={editTargetTime} onChange={(e) => setEditTargetTime(e.target.value)} placeholder="00:50:00" /></label>
+                  </div>
+                  {editError && <p className="form-error" role="alert">{editError}</p>}
+                  <div className="goal-form-actions">
+                    <button type="submit" className="primary-action">Save changes</button>
+                    <button type="button" className="secondary-action" onClick={() => setEditing(false)}>Discard</button>
+                  </div>
+                </form>
+              : <><div>
+                  <span className={goal.active ? "pill active-pill" : "pill"}>{goal.active ? "Active" : "Archived"}</span>
+                  <h3>{goal.name}</h3>
+                  <p>{goal.distance_km} km · {formatDate(goal.race_date, "long")}{goal.target_time && ` · Target ${goal.target_time}`}</p>
+                  {goal.active && <div className="goal-actions">
+                    <button type="button" className="secondary-action" onClick={startEdit}><Pencil size={14} aria-hidden="true" />Edit plan</button>
+                    <button type="button" className="cancel-plan-action" onClick={cancelPlan}><X size={14} aria-hidden="true" />Cancel plan</button>
+                  </div>}
+                </div><Trophy size={24} aria-hidden="true" /></>}
+          </li>
+        )}</ul>
+      : <EmptyState title="No goals yet" body="Your first race goal will anchor your training plan." action={onCreate} actionLabel="Create goal" />}
+  </section>;
 }
 
 function GoalSetup({ onState }: { onState: (state: PlannerState) => void }) {

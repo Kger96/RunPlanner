@@ -1,4 +1,4 @@
-import type { Goal, GoalInput, PlannerState, Run, RunInput, Session, SessionInput, SessionTemplate, SessionTemplateInput, Theme } from "./types";
+import type { EditPlanInput, Goal, GoalInput, PlannerState, Run, RunInput, Session, SessionInput, SessionTemplate, SessionTemplateInput, Theme } from "./types";
 
 const storageKey = "training-planner-state-v2";
 const legacyStorageKey = "training-planner-preview-state";
@@ -87,4 +87,36 @@ window.trainingPlanner = {
     return writeState({ ...state, runs: [...state.runs, run], sessions: state.sessions.map((session) => session.id === input.sessionId ? { ...session, status: "completed" } : session) });
   },
   setTheme: async (theme: Theme) => writeState({ ...readState(), theme }),
+  cancelPlan: async () => {
+    const state = readState();
+    if (!state.activeGoal) throw new Error("No active plan to cancel.");
+    const goalId = state.activeGoal.id;
+    const sessionIds = new Set(state.sessions.filter((s) => s.goal_id === goalId).map((s) => s.id));
+    return writeState({
+      ...state,
+      goals: state.goals.filter((g) => g.id !== goalId),
+      activeGoal: null,
+      sessions: state.sessions.filter((s) => s.goal_id !== goalId),
+      runs: state.runs.filter((r) => !r.session_id || !sessionIds.has(r.session_id)),
+    });
+  },
+  editPlan: async (input: EditPlanInput) => {
+    if (!input.name.trim() || !input.raceDate || !(input.distanceKm > 0)) throw new Error("Goal name, race date, and distance are required.");
+    const state = readState();
+    const existing = state.goals.find((g) => g.id === input.id);
+    if (!existing) throw new Error("Goal not found.");
+    const updated: Goal = { ...existing, name: input.name.trim(), race_date: input.raceDate, plan_start_date: input.planStartDate || null, distance_km: input.distanceKm, target_time: input.targetTime?.trim() || null };
+    const outsideIds = new Set(
+      state.sessions
+        .filter((s) => s.goal_id === input.id && ((updated.plan_start_date && s.scheduled_date < updated.plan_start_date) || s.scheduled_date > updated.race_date))
+        .map((s) => s.id)
+    );
+    return writeState({
+      ...state,
+      goals: state.goals.map((g) => g.id === input.id ? updated : g),
+      activeGoal: updated,
+      sessions: state.sessions.filter((s) => !outsideIds.has(s.id)),
+      runs: state.runs.filter((r) => !r.session_id || !outsideIds.has(r.session_id)),
+    });
+  },
 };

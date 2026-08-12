@@ -49,7 +49,7 @@ export default function App() {
         {view === "Planner" && <PlannerView state={state} onState={setState} onError={setError} />}
         {view === "Session builder" && <SessionBuilderView state={state} onState={setState} onError={setError} />}
         {view === "Run log" && <RunLogView state={state} onState={setState} onError={setError} openEntry={openRunEntry} onEntryOpened={() => setOpenRunEntry(false)} />}
-        {view === "Goals & history" && <GoalHistoryView state={state} onCreate={() => setView("Dashboard")} />}
+        {view === "Goals & history" && <GoalHistoryView state={state} onCreate={() => setView("Dashboard")} onState={setState} onError={setError} />}
         {view === "Settings" && <SettingsView theme={state.theme} onTheme={setTheme} />}
       </section>
     </main>

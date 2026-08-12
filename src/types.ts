@@ -109,6 +109,15 @@ export interface RunInput {
   notes?: string;
 }
 
+export interface EditPlanInput {
+  id: number;
+  name: string;
+  raceDate: string;
+  planStartDate?: string;
+  distanceKm: number;
+  targetTime?: string;
+}
+
 declare global {
   interface Window {
     trainingPlanner: {
@@ -120,6 +129,8 @@ declare global {
       skipSession: (id: number) => Promise<PlannerState>;
       logRun: (input: RunInput) => Promise<PlannerState>;
       setTheme: (theme: Theme) => Promise<PlannerState>;
+      cancelPlan: () => Promise<PlannerState>;
+      editPlan: (input: EditPlanInput) => Promise<PlannerState>;
     };
   }
 }

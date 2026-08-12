@@ -477,3 +477,107 @@ Every repeat block displays recovery configuration and does not provide a contro
 - Resolution: Added an Include recovery after every run checkbox. When unchecked, recovery fields are hidden, recovery values are cleared, and recovery targets are excluded from saved template totals. Existing templates retain recovery by default.
 - Validation: Typecheck, renderer build, and unit suite verified recovery-inclusive and recovery-free totals.
 - Missing information: Application version/build and affected operating system were not provided.
+
+## BUG-20260810-001: Goals and History page cannot cancel an active plan
+
+- **Reported:** 2026-08-10
+- **Severity:** High
+- **Status:** Resolved
+- **Area:** Goals and History active-plan management
+- **Environment:** Not provided
+- **Impact:** Runners cannot discard an incorrectly created or no-longer needed active plan before starting a new one. 
+
+### Summary
+The Goals and History page needs a Cancel plan control for the active plan. Cancellation must permanently delete the active goal and all data associated with it.  
+
+### Steps to Reproduce
+1. Create or open an active training plan.
+2. Open Goals and History.
+3. Attempt to cancel the active plan so that a new plan can be started.
+
+### Expected Behaviour
+The active plan section should provide a Cancel plan control. Selecting it should show a confirmation dialog that identifies the destructive action. Confirming cancellation should permamently delete the active goal and all associated plan data, including sessions, reusable templates associated with the plan where applicable, and completed runs associated with the plan. 
+
+### Actual Behaviour
+The Goals an History page does not provide a way to cancel the active plan and permanently remove its associated data.
+
+### Evidence
+- Stakeholder request: "There needs to be a cancel plan button. If someone creates a plan which is incorrect or they want to start a new plan then they have the option to cancel it. I think a button on the goals and history page on the associated active plan would be a good place for it."
+- Stakeholder clarification: "Permanently delete all data associated with it and yes include a dialog."
+
+### Triage Notes
+- Reproducibility: Always
+- Workaround: None needed after resolution.
+- Resolution: Added a Cancel plan button to the active goal card on Goals and History. Confirmation dialog warns that all associated sessions and runs will be permanently deleted; templates are retained. Confirmed: action removes the goal, all goal sessions, and their logged runs from state.
+- Validation: Typecheck verified.
+- Missing information: Application version/build and affected operating system were not provided.
+
+## BUG-20260810-002: Goals and History page cannot edit an active plan
+
+- **Reported:** 2026-08-10
+- **Severity:** High
+- **Status:** Resolved
+- **Area:** Goals and History active-plan management
+- **Environment:** Not provided
+- **Impact:** Runners cannot correct active-plan details, including date range and race targets without cancelling the entire plan. 
+
+### Summary
+The active-plan section on Goals and History needs an Edit plan control. It must allow the runner to update the plan name, start date, end date, race distance and target time.   
+
+### Steps to Reproduce
+1. Create or open an active training plan.
+2. Open Goals and History.
+3. Attempt to edit the active plans name, start date, end date, race distance or target time. 
+
+### Expected Behaviour
+The active plan section should provide an Edit plan control. The edit workflow should allow the runner to change the plan name, start date, end date, race distance, and target time. Before committing a changed date range, the application should detect completed activities outside the proposed range and display a confirmation dialog warning that those activities will be permanently deleted. Confirming the dialog should apply the changes and delete only the affected completed activities. 
+
+### Actual Behaviour
+The Goals an History page does not provide an active-plan editing workflow or date-range warning for completed activities that would be removed. 
+
+### Evidence
+- Stakeholder request: "I also want an edit plan button on the associated plan on the goals and history tab. This will enable the user to edit the start and end date of the plan, target time, race distance and plan name. If the date is changed, then activities which were completed outside of the new date range will be lost. This warning is displayed via a dialog before the user commits their changes"
+
+### Triage Notes
+- Reproducibility: Always
+- Workaround: None needed after resolution.
+- Resolution: Added an Edit plan button to the active goal card. Clicking it reveals an inline form to update name, plan start date, race date, distance, and target time. If the date range is narrowed, sessions outside the new range (and their associated runs) are deleted after a generic confirmation dialog. Changes are committed via a new `editPlan` browser-API method.
+- Validation: Typecheck verified.
+- Missing information: Application version/build and affected operating system were not provided.
+
+## BUG-20260812-001: Session Builder cosmetic appearance does not match design mockup
+
+- **Reported:** 2026-08-12
+- **Severity:** Low
+- **Status:** Resolved
+- **Area:** Session Builder
+- **Environment:** Not provided
+- **Impact:** The session builder UI does not match the intended design, reducing visual polish and usability clarity.
+
+### Summary
+The session builder page has cosmetic differences from the agreed design mockup. Most notably, the session metrics (total distance and total time) are currently displayed in the top-right area of the page rather than in a summary bar at the bottom, as shown in the mockup.
+
+### Steps to Reproduce
+1. Open the application and navigate to the Session Builder.
+2. Add one or more segments (e.g. Warm up, Run, Cool down).
+3. Observe the layout of the page, particularly the placement of session metrics.
+
+### Expected Behaviour
+The session builder should closely mirror the design mockup:
+- Segment cards styled with coloured left-border accents per segment type (Warm up, Run, Cool down).
+- Segment-type icons displayed alongside the segment heading.
+- A fixed bottom summary bar showing total distance (excluding recoveries) and estimated total time, alongside a "Preview workout" action button.
+- Add-segment buttons (+ Warm up, + Run, + Rest, + Cool down) grouped in the top-right header area.
+
+### Actual Behaviour
+Session metrics (total distance) are displayed in the top-right of the page rather than in a bottom summary bar. The segment cards, icons, and overall visual treatment do not match the mockup.
+
+### Evidence
+- Stakeholder-supplied mockup screenshot showing the intended layout, including the bottom metrics bar with "Total distance: 5.20 km (excluding recoveries) • Total time: ~24:52" and a "Preview workout" button.
+
+### Triage Notes
+- Reproducibility: Always
+- Workaround: None needed after resolution.
+- Resolution: (1) Add-segment buttons moved to the page-level header (top right), matching mockup layout. (2) Per-type coloured left-border accents applied to segment cards (amber warmup, orange run, teal rest, green cooldown). (3) Type-appropriate icons added to each segment header badge. (4) Total distance (excluding recoveries) and estimated total time moved to a bottom summary bar alongside a Preview workout button. The old template-total widget was removed from the top of the page.
+- Validation: Typecheck verified.
+- Missing information: Application version/build and affected operating system were not provided.
