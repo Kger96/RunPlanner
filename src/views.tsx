@@ -47,30 +47,63 @@ export function DashboardView({ state, onState, onPlanner }: { state: PlannerSta
 }
 
 export function PlannerView({ state, onState, onError }: { state: PlannerState; onState: (state: PlannerState) => void; onError: (message: string) => void }) {
-  const [weekOffset, setWeekOffset] = useState<number | null>(null);
+  const [monthOffset, setMonthOffset] = useState<number | null>(null);
   const [selected, setSelected] = useState<{ session?: Session; date: string } | null>(null);
   const [draggedId, setDraggedId] = useState<number | null>(null);
   const [runSession, setRunSession] = useState<Session | null>(null);
 
-  if (!state.activeGoal) return <EmptyState title="Create a goal first" body="Your weekly plan will appear after you set a race goal." />;
+  if (!state.activeGoal) return <EmptyState title="Create a goal first" body="Your monthly plan will appear after you set a race goal." />;
   const goal = state.activeGoal;
-  const { first, last } = getPlanWeekRange(goal.plan_start_date, goal.race_date);
-  const currentWeek = weekStart(new Date());
-  const defaultWeek = currentWeek < first ? first : currentWeek > last ? last : currentWeek;
-  const defaultOffset = Math.round((defaultWeek.getTime() - first.getTime()) / (7 * 86_400_000));
-  const activeOffset = weekOffset ?? defaultOffset;
-  const selectedWeekStart = new Date(first.getFullYear(), first.getMonth(), first.getDate() + activeOffset * 7);
-  const days = Array.from({ length: 7 }, (_, index) => new Date(selectedWeekStart.getFullYear(), selectedWeekStart.getMonth(), selectedWeekStart.getDate() + index));
-  const canGoPrevious = activeOffset > 0;
-  const canGoNext = selectedWeekStart < last;
+  const today = new Date();
+  const todayIso = isoDate(today);
+
+  const planStart = new Date(`${goal.plan_start_date || goal.race_date}T12:00:00`);
+  const raceEnd = new Date(`${goal.race_date}T12:00:00`);
+  const baseYear = planStart.getFullYear();
+  const baseMonth = planStart.getMonth();
+  const maxOffset = (raceEnd.getFullYear() - baseYear) * 12 + (raceEnd.getMonth() - baseMonth);
+  const rawDefault = (today.getFullYear() - baseYear) * 12 + (today.getMonth() - baseMonth);
+  const active = monthOffset ?? Math.max(0, Math.min(rawDefault, maxOffset));
+
+  const displayYear = baseYear + Math.floor((baseMonth + active) / 12);
+  const displayMonth = (baseMonth + active) % 12;
+  const firstOfMonth = new Date(displayYear, displayMonth, 1);
+  const lastOfMonth = new Date(displayYear, displayMonth + 1, 0);
+  const leadingPad = (firstOfMonth.getDay() || 7) - 1;
+  const totalCells = Math.ceil((leadingPad + lastOfMonth.getDate()) / 7) * 7;
+  const cells = Array.from({ length: totalCells }, (_, i) => {
+    const d = i - leadingPad + 1;
+    return d >= 1 && d <= lastOfMonth.getDate() ? new Date(displayYear, displayMonth, d) : null;
+  });
+  const monthLabel = firstOfMonth.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+
   async function reschedule(id: number, scheduledDate: string) {
     try { onState(await window.trainingPlanner.rescheduleSession({ id, scheduledDate })); setSelected(null); }
     catch (error) { onError(error instanceof Error ? error.message : "Session could not be rescheduled."); }
   }
+
+  const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
   return <section className="planner">
-    <div className="planner-header"><div><p className="eyebrow">ACTIVE PLAN</p><h2>{goal.name}</h2></div><div className="week-controls"><button aria-label="Previous week" disabled={!canGoPrevious} onClick={() => setWeekOffset(activeOffset - 1)}><ChevronLeft /></button><strong>{formatDate(days[0], "range")} - {formatDate(days[6], "range")}</strong><button aria-label="Next week" disabled={!canGoNext} onClick={() => setWeekOffset(activeOffset + 1)}><ChevronRight /></button></div></div>
-    <div className="week-grid">{days.map((day) => { const date = isoDate(day); const inPlan = date >= (goal.plan_start_date || date) && date <= goal.race_date; const sessions = state.sessions.filter((session) => session.scheduled_date === date); return <section key={date} className={inPlan ? "day-column" : "day-column out-of-plan"} onDragOver={(event) => { if (inPlan) event.preventDefault(); }} onDrop={() => { if (inPlan && draggedId) reschedule(draggedId, date); setDraggedId(null); }}><header><span>{formatDate(day, "weekday")}</span><strong>{day.getDate()}</strong></header><div className="day-sessions">{sessions.map((session) => <button key={session.id} draggable={inPlan} onDragStart={() => setDraggedId(session.id)} className={`session-card ${session.status}`} onClick={() => setSelected({ session, date })}><span>{session.status === "completed" ? "Completed" : session.status === "skipped" ? "Skipped" : session.run_type}</span><strong>{session.target_distance_km ? `${session.target_distance_km} km` : session.target_duration_seconds ? formatDuration(session.target_duration_seconds) : "Structured"}</strong>{session.pace_low && <small>{session.pace_low}-{session.pace_high}/km</small>}</button>)}</div><button className="add-session" disabled={!inPlan} onClick={() => setSelected({ date })}><Plus size={15} aria-hidden="true" />Add</button></section>; })}</div>
-    <p className="planner-help">Weeks and dates outside the active plan are unavailable. Drag a session to another available plan day, or use the reschedule date in its detail panel.</p>
+    <div className="planner-header"><div><p className="eyebrow">ACTIVE PLAN</p><h2>{goal.name}</h2></div><div className="week-controls"><button aria-label="Previous month" disabled={active === 0} onClick={() => setMonthOffset(active - 1)}><ChevronLeft /></button><strong className="month-label">{monthLabel}</strong><button aria-label="Next month" disabled={active === maxOffset} onClick={() => setMonthOffset(active + 1)}><ChevronRight /></button></div></div>
+    <div className="month-grid">
+      {dayNames.map((d) => <div key={d} className="month-day-name">{d}</div>)}
+      {cells.map((day, i) => {
+        if (!day) return <div key={`pad-${i}`} className="month-cell month-cell--pad" />;
+        const date = isoDate(day);
+        const inPlan = date >= (goal.plan_start_date || date) && date <= goal.race_date;
+        const sessions = state.sessions.filter((s) => s.scheduled_date === date);
+        const isToday = todayIso === date;
+        return <div key={date} className={`month-cell${inPlan ? "" : " month-cell--out"}${isToday ? " month-cell--today" : ""}`} onDragOver={(e) => { if (inPlan) e.preventDefault(); }} onDrop={() => { if (inPlan && draggedId) reschedule(draggedId, date); setDraggedId(null); }}>
+          <div className="month-cell-header">
+            <span className="month-day-num">{day.getDate()}</span>
+            {inPlan && <button className="add-session-icon" onClick={() => setSelected({ date })} aria-label={`Add session on ${date}`}><Plus size={12} /></button>}
+          </div>
+          <div className="month-sessions">{sessions.map((session) => { const typeClass = session.status === "scheduled" ? `type-${session.run_type.toLowerCase()}` : ""; return <button key={session.id} draggable={inPlan} onDragStart={() => setDraggedId(session.id)} className={`session-card ${session.status} ${typeClass}`} onClick={() => setSelected({ session, date })}><span>{session.status === "completed" ? "Completed" : session.status === "skipped" ? "Skipped" : session.run_type}</span><strong>{session.target_distance_km ? `${session.target_distance_km} km` : session.target_duration_seconds ? formatDuration(session.target_duration_seconds) : "Structured"}</strong></button>; })}</div>
+        </div>;
+      })}
+    </div>
+    <p className="planner-help">Dates outside the active plan are unavailable. Drag a session to another available day, or use the reschedule date in its detail panel.</p>
     {selected && <SessionPanelWithTemplates session={selected.session} date={selected.date} goalId={goal.id} templates={state.templates} onClose={() => setSelected(null)} onState={onState} onError={onError} onLog={(session) => { setSelected(null); setRunSession(session); }} />}
     {runSession && <RunEntryPanel session={runSession} onClose={() => setRunSession(null)} onState={onState} onError={onError} />}
   </section>;
