@@ -27,6 +27,18 @@ export interface Session {
   template_id: number | null;
 }
 
+export interface RepeatSubSegment {
+  id: number;
+  position: number;
+  distance_km: number | null;
+  duration_seconds: number | null;
+  target_pace: string | null;
+  rest_distance_km: number | null;
+  rest_duration_seconds: number | null;
+  rest_pace: string | null;
+  include_recovery: number;
+}
+
 export interface SessionTemplateSegment {
   id?: number;
   position: number;
@@ -39,6 +51,7 @@ export interface SessionTemplateSegment {
   rest_duration_seconds: number | null;
   rest_pace: string | null;
   include_recovery?: number;
+  children?: RepeatSubSegment[];
 }
 
 export interface SessionTemplate {

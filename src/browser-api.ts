@@ -11,7 +11,17 @@ function normalizeState(value: Partial<PlannerState>): PlannerState {
     ...value,
     templates: (value.templates || []).map((template) => ({
       ...template,
-      segments: template.segments.map((segment) => ({ ...segment, include_recovery: segment.include_recovery === 0 ? 0 : 1 })),
+      segments: template.segments.map((segment) => {
+        if (segment.segment_type === "repeat" && !segment.children?.length) {
+          // Migrate single-run repeat segments to the new children format
+          return {
+            ...segment,
+            include_recovery: 1,
+            children: [{ id: 1, position: 0, distance_km: segment.distance_km, duration_seconds: segment.duration_seconds, target_pace: segment.target_pace, rest_distance_km: segment.rest_distance_km, rest_duration_seconds: segment.rest_duration_seconds, rest_pace: segment.rest_pace, include_recovery: segment.include_recovery === 0 ? 0 : 1 }],
+          };
+        }
+        return { ...segment, include_recovery: segment.include_recovery === 0 ? 0 : 1, children: segment.children?.map((child) => ({ ...child, include_recovery: child.include_recovery === 0 ? 0 : 1 })) };
+      }),
     })),
   };
 }
@@ -63,7 +73,10 @@ window.trainingPlanner = {
   },
   createSessionTemplate: async (input: SessionTemplateInput) => {
     if (!input.name.trim() || !input.segments.length) throw new Error("A template name and at least one segment are required.");
-    if (input.segments.some((segment) => !(segment.distance_km && segment.distance_km > 0) && !(segment.duration_seconds && segment.duration_seconds > 0))) throw new Error("Every segment needs a distance or duration.");
+    if (input.segments.some((segment) => {
+      if (segment.segment_type === "repeat" && segment.children?.length) return segment.children.some((child) => !(child.distance_km && child.distance_km > 0) && !(child.duration_seconds && child.duration_seconds > 0));
+      return !(segment.distance_km && segment.distance_km > 0) && !(segment.duration_seconds && segment.duration_seconds > 0);
+    })) throw new Error("Every segment needs a distance or duration.");
     const state = readState();
     if (state.templates.some((template) => template.name.toLowerCase() === input.name.trim().toLowerCase())) throw new Error("A session template with this name already exists.");
     const template: SessionTemplate = { id: nextId(state.templates), name: input.name.trim(), notes: input.notes?.trim() || null, segments: input.segments.map((segment, position) => ({ ...segment, id: position + 1, position })) };

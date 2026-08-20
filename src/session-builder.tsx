@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { CopyPlus, Footprints, GripVertical, Pause, Plus, SkipForward, Timer, Trash2, Wind, X } from "lucide-react";
 import { calculateTemplateTargets, formatDuration } from "./domain";
-import type { PlannerState, SegmentType, Session, SessionInput, SessionTemplate, SessionTemplateInput, SessionTemplateSegment } from "./types";
+import type { PlannerState, RepeatSubSegment, SegmentType, Session, SessionInput, SessionTemplate, SessionTemplateInput, SessionTemplateSegment } from "./types";
 
 const predefinedRunTypes = ["Easy", "Long", "Tempo", "Interval", "Race"];
 const segmentLabels: Record<SegmentType, string> = { warmup: "Warm up", repeat: "Run", rest: "Rest", cooldown: "Cool down" };
@@ -21,7 +21,7 @@ function formatDurationInput(seconds: number | null): string {
 function newSegment(segmentType: SegmentType, position: number): SessionTemplateSegment {
   const defaults: Record<SegmentType, Partial<SessionTemplateSegment>> = {
     warmup: { distance_km: 1, target_pace: "6:00" },
-    repeat: { distance_km: 0.4, target_pace: "4:30", repeat_count: 4, rest_distance_km: 0.2, rest_pace: "7:00", include_recovery: 1 },
+    repeat: { repeat_count: 4, children: [{ id: 1, position: 0, distance_km: 0.4, duration_seconds: null, target_pace: "4:30", rest_distance_km: 0.2, rest_duration_seconds: null, rest_pace: "7:00", include_recovery: 1 }] },
     rest: { distance_km: 0.2, target_pace: "7:00" },
     cooldown: { distance_km: 1, target_pace: "6:15" },
   };
@@ -29,6 +29,10 @@ function newSegment(segmentType: SegmentType, position: number): SessionTemplate
 }
 
 function segmentDescription(segment: SessionTemplateSegment): string {
+  if (segment.segment_type === "repeat" && segment.children?.length) {
+    const runs = segment.children.map((child) => child.distance_km ? `${child.distance_km} km` : formatDurationInput(child.duration_seconds) || "?").join(" + ");
+    return `${segment.repeat_count || 1} × (${runs})`;
+  }
   const target = segment.distance_km ? `${segment.distance_km} km` : formatDurationInput(segment.duration_seconds);
   if (segment.segment_type !== "repeat") return target || "No target";
   if (segment.include_recovery === 0) return `${segment.repeat_count || 1} x ${target}`;
@@ -74,6 +78,10 @@ export function SessionBuilderView({ state, onState, onError }: { state: Planner
 
   const targets = calculateTemplateTargets(segments);
   const distanceExclRecovery = segments.reduce((total, seg) => {
+    if (seg.segment_type === "repeat" && seg.children?.length) {
+      const repeatCount = Number(seg.repeat_count || 1);
+      return total + seg.children.reduce((sum, child) => sum + Number(child.distance_km || 0), 0) * repeatCount;
+    }
     const multiplier = seg.segment_type === "repeat" ? Number(seg.repeat_count || 1) : 1;
     return total + Number(seg.distance_km || 0) * multiplier;
   }, 0);
@@ -82,7 +90,7 @@ export function SessionBuilderView({ state, onState, onError }: { state: Planner
     <div className="list-header"><div><p className="eyebrow">REUSABLE WORKOUTS</p><h2>Session Builder</h2><p>Build a custom structured session and reuse throughout your plans.</p></div></div>
     <div className="builder-layout">
       <form className="builder-form" onSubmit={saveTemplate}>
-        <div className="field-row"><label>Session name<input value={name} onChange={(event) => setName(event.target.value)} placeholder="6 x 400 m intervals" required /></label><label>Notes <span className="optional">Optional</span><input value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Hard but controlled" /></label></div>
+        <div className="field-row"><label>Session name<input value={name} onChange={(event) => setName(event.target.value)} placeholder="6 x 400 m intervals" required /></label><label><span>Notes <span className="optional">Optional</span></span><input value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Hard but controlled" /></label></div>
         <div className="builder-heading"><div><h3>Workout segments</h3><p>Repeat segments include their configured recovery on every repetition.</p></div><div className="segment-actions">{(["warmup", "repeat", "rest", "cooldown"] as SegmentType[]).map((type) => <button key={type} type="button" className="add-segment" onClick={() => setSegments((current) => [...current, newSegment(type, current.length)])}><Plus size={14} />{segmentLabels[type]}</button>)}</div></div>
         <ol className="segment-list">{segments.map((segment, index) => <SegmentEditor key={`${segment.id}-${index}`} index={index} segment={segment} onChange={(changes) => updateSegment(index, changes)} onDrop={(fromIndex) => moveSegment(fromIndex, index)} onRemove={() => setSegments((current) => current.filter((_, segmentIndex) => segmentIndex !== index).map((item, position) => ({ ...item, position })))} canRemove={segments.length > 1} />)}</ol>
         {formError && <p className="form-error" role="alert">{formError}</p>}
@@ -98,9 +106,64 @@ export function SessionBuilderView({ state, onState, onError }: { state: Planner
 
 function SegmentEditor({ index, segment, onChange, onDrop, onRemove, canRemove }: { index: number; segment: SessionTemplateSegment; onChange: (changes: Partial<SessionTemplateSegment>) => void; onDrop: (fromIndex: number) => void; onRemove: () => void; canRemove: boolean }) {
   const [targetMode, setTargetMode] = useState<"distance" | "duration">(segment.duration_seconds && !segment.distance_km ? "duration" : "distance");
-  const [recoveryMode, setRecoveryMode] = useState<"distance" | "duration">(segment.rest_duration_seconds && !segment.rest_distance_km ? "duration" : "distance");
   const [dragOver, setDragOver] = useState(false);
-  const includesRecovery = segment.include_recovery !== 0;
+  const isRepeat = segment.segment_type === "repeat";
+
+  function changeTargetMode(mode: "distance" | "duration") {
+    setTargetMode(mode);
+    onChange(mode === "distance" ? { duration_seconds: null } : { distance_km: null });
+  }
+
+  function addChild() {
+    const children = segment.children || [];
+    const child: RepeatSubSegment = { id: children.length + 1, position: children.length, distance_km: 0.4, duration_seconds: null, target_pace: "4:30", rest_distance_km: 0.2, rest_duration_seconds: null, rest_pace: "7:00", include_recovery: 1 };
+    onChange({ children: [...children, child] });
+  }
+
+  function updateChild(i: number, changes: Partial<RepeatSubSegment>) {
+    onChange({ children: (segment.children || []).map((c, idx) => idx === i ? { ...c, ...changes } : c) });
+  }
+
+  function removeChild(i: number) {
+    onChange({ children: (segment.children || []).filter((_, idx) => idx !== i).map((c, idx) => ({ ...c, id: idx + 1, position: idx })) });
+  }
+
+  return <li
+    className={`segment-editor ${segment.segment_type}${dragOver ? " drag-over" : ""}`}
+    draggable
+    onDragStart={(e) => e.dataTransfer.setData("text/plain", String(index))}
+    onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+    onDragLeave={() => setDragOver(false)}
+    onDrop={(e) => { e.preventDefault(); setDragOver(false); const from = Number(e.dataTransfer.getData("text/plain")); if (from !== index) onDrop(from); }}
+  >
+    <div className="segment-toolbar">
+      <div className="segment-toolbar-left"><span className="drag-handle" aria-hidden="true"><GripVertical size={15} /></span><span className={`segment-kind ${segment.segment_type}`}>{segmentIcons[segment.segment_type]}{segmentLabels[segment.segment_type]}</span></div>
+      <div className="segment-toolbar-right">
+        {isRepeat && <label className="repeats-inline">Repeats<input type="number" min="1" value={segment.repeat_count || ""} onChange={(e) => onChange({ repeat_count: e.target.value ? Number(e.target.value) : null })} /></label>}
+        <button type="button" onClick={onRemove} disabled={!canRemove} aria-label="Remove segment"><Trash2 size={15} /></button>
+      </div>
+    </div>
+    {isRepeat ? (
+      <>
+        <ol className="repeat-children">
+          {(segment.children || []).map((child, i) => <RepeatChildEditor key={`${child.id}-${i}`} child={child} onChange={(changes) => updateChild(i, changes)} onRemove={() => removeChild(i)} canRemove={(segment.children || []).length > 1} />)}
+        </ol>
+        <button type="button" className="add-repeat-child" onClick={addChild}><Plus size={13} />Add run</button>
+      </>
+    ) : (
+      <div className="segment-fields">
+        <label>Type<select value={targetMode} onChange={(event) => changeTargetMode(event.target.value as "distance" | "duration")}><option value="distance">Distance</option><option value="duration">Duration</option></select></label>
+        {targetMode === "distance" ? <label>Distance<div className="input-with-unit"><input type="number" min="0" step="0.1" value={segment.distance_km || ""} onChange={(event) => onChange({ distance_km: event.target.value ? Number(event.target.value) : null })} /><span className="input-unit">km</span></div></label> : <label>Duration<div className="input-with-unit"><input value={formatDurationInput(segment.duration_seconds)} placeholder="05:00" onChange={(event) => onChange({ duration_seconds: parseDuration(event.target.value) })} /><span className="input-unit">mm:ss</span></div></label>}
+        <label>Pace<div className="input-with-unit"><input value={segment.target_pace || ""} placeholder="5:30" onChange={(event) => onChange({ target_pace: event.target.value || null })} /><span className="input-unit">/km</span></div></label>
+      </div>
+    )}
+  </li>;
+}
+
+function RepeatChildEditor({ child, onChange, onRemove, canRemove }: { child: RepeatSubSegment; onChange: (changes: Partial<RepeatSubSegment>) => void; onRemove: () => void; canRemove: boolean }) {
+  const [targetMode, setTargetMode] = useState<"distance" | "duration">(child.duration_seconds && !child.distance_km ? "duration" : "distance");
+  const [recoveryMode, setRecoveryMode] = useState<"distance" | "duration">(child.rest_duration_seconds && !child.rest_distance_km ? "duration" : "distance");
+  const includesRecovery = child.include_recovery !== 0;
 
   function changeTargetMode(mode: "distance" | "duration") {
     setTargetMode(mode);
@@ -112,23 +175,18 @@ function SegmentEditor({ index, segment, onChange, onDrop, onRemove, canRemove }
     onChange(mode === "distance" ? { rest_duration_seconds: null } : { rest_distance_km: null });
   }
 
-  return <li
-    className={`segment-editor ${segment.segment_type}${dragOver ? " drag-over" : ""}`}
-    draggable
-    onDragStart={(e) => e.dataTransfer.setData("text/plain", String(index))}
-    onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-    onDragLeave={() => setDragOver(false)}
-    onDrop={(e) => { e.preventDefault(); setDragOver(false); const from = Number(e.dataTransfer.getData("text/plain")); if (from !== index) onDrop(from); }}
-  >
-    <div className="segment-toolbar"><div className="segment-toolbar-left"><span className="drag-handle" aria-hidden="true"><GripVertical size={15} /></span><span className={`segment-kind ${segment.segment_type}`}>{segmentIcons[segment.segment_type]}{segmentLabels[segment.segment_type]}</span></div><button type="button" onClick={onRemove} disabled={!canRemove} aria-label="Remove segment"><Trash2 size={15} /></button></div>
-    <div className="segment-fields">
-      <label>Type<select value={targetMode} onChange={(event) => changeTargetMode(event.target.value as "distance" | "duration")}><option value="distance">Distance</option><option value="duration">Duration</option></select></label>
-      {targetMode === "distance" ? <label>Distance<div className="input-with-unit"><input type="number" min="0" step="0.1" value={segment.distance_km || ""} onChange={(event) => onChange({ distance_km: event.target.value ? Number(event.target.value) : null })} /><span className="input-unit">km</span></div></label> : <label>Duration<div className="input-with-unit"><input value={formatDurationInput(segment.duration_seconds)} placeholder="05:00" onChange={(event) => onChange({ duration_seconds: parseDuration(event.target.value) })} /><span className="input-unit">mm:ss</span></div></label>}
-      <label>Pace<div className="input-with-unit"><input value={segment.target_pace || ""} placeholder="5:30" onChange={(event) => onChange({ target_pace: event.target.value || null })} /><span className="input-unit">/km</span></div></label>
-      {segment.segment_type === "repeat" && <label>Repeats<input type="number" min="1" value={segment.repeat_count || ""} onChange={(event) => onChange({ repeat_count: event.target.value ? Number(event.target.value) : null })} /></label>}
-    </div>
-    {segment.segment_type === "repeat" && <><label className="recovery-toggle"><input type="checkbox" checked={includesRecovery} onChange={(event) => onChange(event.target.checked ? { include_recovery: 1 } : { include_recovery: 0, rest_distance_km: null, rest_duration_seconds: null, rest_pace: null })} />Include recovery</label>{includesRecovery && <div className="recovery-fields recovery-fields--block"><label>Type<select value={recoveryMode} onChange={(event) => changeRecoveryMode(event.target.value as "distance" | "duration")}><option value="distance">Distance</option><option value="duration">Duration</option></select></label>{recoveryMode === "distance" ? <label>Distance<div className="input-with-unit"><input type="number" min="0" step="0.1" value={segment.rest_distance_km || ""} onChange={(event) => onChange({ rest_distance_km: event.target.value ? Number(event.target.value) : null })} /><span className="input-unit">km</span></div></label> : <label>Duration<div className="input-with-unit"><input value={formatDurationInput(segment.rest_duration_seconds)} placeholder="01:00" onChange={(event) => onChange({ rest_duration_seconds: parseDuration(event.target.value) })} /><span className="input-unit">mm:ss</span></div></label>}<label>Pace<div className="input-with-unit"><input value={segment.rest_pace || ""} placeholder="7:00" onChange={(event) => onChange({ rest_pace: event.target.value || null })} /><span className="input-unit">/km</span></div></label></div>}</>}
-  </li>;
+  return (
+    <li className="repeat-child">
+      <div className="segment-fields">
+        <label>Type<select value={targetMode} onChange={(e) => changeTargetMode(e.target.value as "distance" | "duration")}><option value="distance">Distance</option><option value="duration">Duration</option></select></label>
+        {targetMode === "distance" ? <label>Distance<div className="input-with-unit"><input type="number" min="0" step="0.1" value={child.distance_km || ""} onChange={(e) => onChange({ distance_km: e.target.value ? Number(e.target.value) : null })} /><span className="input-unit">km</span></div></label> : <label>Duration<div className="input-with-unit"><input value={formatDurationInput(child.duration_seconds)} placeholder="05:00" onChange={(e) => onChange({ duration_seconds: parseDuration(e.target.value) })} /><span className="input-unit">mm:ss</span></div></label>}
+        <label>Pace<div className="input-with-unit"><input value={child.target_pace || ""} placeholder="4:30" onChange={(e) => onChange({ target_pace: e.target.value || null })} /><span className="input-unit">/km</span></div></label>
+        <button type="button" className="remove-child" onClick={onRemove} disabled={!canRemove} aria-label="Remove run"><Trash2 size={14} /></button>
+      </div>
+      <label className="recovery-toggle"><input type="checkbox" checked={includesRecovery} onChange={(e) => onChange(e.target.checked ? { include_recovery: 1 } : { include_recovery: 0, rest_distance_km: null, rest_duration_seconds: null, rest_pace: null })} />Include recovery</label>
+      {includesRecovery && <div className="recovery-fields recovery-fields--block"><label>Type<select value={recoveryMode} onChange={(e) => changeRecoveryMode(e.target.value as "distance" | "duration")}><option value="distance">Distance</option><option value="duration">Duration</option></select></label>{recoveryMode === "distance" ? <label>Distance<div className="input-with-unit"><input type="number" min="0" step="0.1" value={child.rest_distance_km || ""} onChange={(e) => onChange({ rest_distance_km: e.target.value ? Number(e.target.value) : null })} /><span className="input-unit">km</span></div></label> : <label>Duration<div className="input-with-unit"><input value={formatDurationInput(child.rest_duration_seconds)} placeholder="01:00" onChange={(e) => onChange({ rest_duration_seconds: parseDuration(e.target.value) })} /><span className="input-unit">mm:ss</span></div></label>}<label>Pace<div className="input-with-unit"><input value={child.rest_pace || ""} placeholder="7:00" onChange={(e) => onChange({ rest_pace: e.target.value || null })} /><span className="input-unit">/km</span></div></label></div>}
+    </li>
+  );
 }
 
 export function SessionPanelWithTemplates({ session, date, goalId, templates, onClose, onState, onError, onLog }: { session?: Session; date: string; goalId: number; templates: SessionTemplate[]; onClose: () => void; onState: (state: PlannerState) => void; onError: (message: string) => void; onLog: (session: Session) => void }) {

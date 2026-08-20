@@ -5,6 +5,13 @@ import { calculateDashboard, daysUntilRace, formatDate, formatDuration, formatPa
 import type { GoalInput, PlannerState, RunInput, Session, SessionInput } from "./types";
 import { SessionPanelWithTemplates } from "./session-builder";
 
+const STANDARD_DISTANCES = [
+  { label: "5K", km: 5 },
+  { label: "10K", km: 10 },
+  { label: "Half Marathon", km: 21.0975 },
+  { label: "Marathon", km: 42.195 },
+];
+
 export function DashboardView({ state, onState, onPlanner }: { state: PlannerState; onState: (state: PlannerState) => void; onPlanner: () => void }) {
   if (!state.activeGoal) return <GoalSetup onState={onState} />;
   const metrics = calculateDashboard(state);
@@ -121,6 +128,7 @@ export function GoalHistoryView({ state, onCreate, onState, onError }: { state: 
   const [editPlanStartDate, setEditPlanStartDate] = useState("");
   const [editRaceDate, setEditRaceDate] = useState("");
   const [editDistanceKm, setEditDistanceKm] = useState("");
+  const [editDistancePreset, setEditDistancePreset] = useState("custom");
   const [editTargetTime, setEditTargetTime] = useState("");
   const [editError, setEditError] = useState("");
 
@@ -129,7 +137,9 @@ export function GoalHistoryView({ state, onCreate, onState, onError }: { state: 
     setEditName(goal.name);
     setEditPlanStartDate(goal.plan_start_date || "");
     setEditRaceDate(goal.race_date);
-    setEditDistanceKm(String(goal.distance_km));
+    const preset = STANDARD_DISTANCES.find((d) => d.km === goal.distance_km);
+    setEditDistancePreset(preset ? String(preset.km) : "custom");
+    setEditDistanceKm(preset ? "" : String(goal.distance_km));
     setEditTargetTime(goal.target_time || "");
     setEditError("");
     setEditing(true);
@@ -153,7 +163,7 @@ export function GoalHistoryView({ state, onCreate, onState, onError }: { state: 
       if (outsideSessions.length > 0 && !window.confirm("Some planned sessions and logged activities fall outside the new date range and will be permanently deleted. Continue?")) return;
     }
     try {
-      onState(await window.trainingPlanner.editPlan({ id: goal.id, name: editName, raceDate: editRaceDate, planStartDate: editPlanStartDate || undefined, distanceKm: Number(editDistanceKm), targetTime: editTargetTime || undefined }));
+      onState(await window.trainingPlanner.editPlan({ id: goal.id, name: editName, raceDate: editRaceDate, planStartDate: editPlanStartDate || undefined, distanceKm: editDistancePreset === "custom" ? Number(editDistanceKm) : Number(editDistancePreset), targetTime: editTargetTime || undefined }));
       setEditing(false);
     } catch (error) {
       const msg = error instanceof Error ? error.message : "The plan could not be updated.";
@@ -175,9 +185,15 @@ export function GoalHistoryView({ state, onCreate, onState, onError }: { state: 
                     <label>Race date<input type="date" value={editRaceDate} onChange={(e) => setEditRaceDate(e.target.value)} required /></label>
                   </div>
                   <div className="field-row">
-                    <label>Distance (km)<input type="number" min="0.1" step="0.1" value={editDistanceKm} onChange={(e) => setEditDistanceKm(e.target.value)} required /></label>
-                    <label>Target time <span className="optional">Optional</span><input value={editTargetTime} onChange={(e) => setEditTargetTime(e.target.value)} placeholder="00:50:00" /></label>
+                    <label>Race distance
+                      <select value={editDistancePreset} onChange={(e) => { setEditDistancePreset(e.target.value); if (e.target.value !== "custom") setEditDistanceKm(""); }}>
+                        {STANDARD_DISTANCES.map((d) => <option key={d.label} value={String(d.km)}>{d.label}</option>)}
+                        <option value="custom">Custom</option>
+                      </select>
+                    </label>
+                    <label><span>Target time <span className="optional">Optional</span></span><input value={editTargetTime} onChange={(e) => setEditTargetTime(e.target.value)} placeholder="00:50:00" /></label>
                   </div>
+                  {editDistancePreset === "custom" && <label>Custom distance (km)<input type="number" min="0.1" step="0.1" value={editDistanceKm} onChange={(e) => setEditDistanceKm(e.target.value)} required /></label>}
                   {editError && <p className="form-error" role="alert">{editError}</p>}
                   <div className="goal-form-actions">
                     <button type="submit" className="primary-action">Save changes</button>
@@ -200,9 +216,48 @@ export function GoalHistoryView({ state, onCreate, onState, onError }: { state: 
 }
 
 function GoalSetup({ onState }: { onState: (state: PlannerState) => void }) {
-  const [name, setName] = useState(""); const [date, setDate] = useState(""); const [planStartDate, setPlanStartDate] = useState(isoDate(new Date())); const [distance, setDistance] = useState("10"); const [targetTime, setTargetTime] = useState(""); const [error, setError] = useState("");
-  async function submit(event: React.FormEvent) { event.preventDefault(); try { onState(await window.trainingPlanner.createGoal({ name, raceDate: date, planStartDate, distanceKm: Number(distance), targetTime })); } catch (reason) { setError(reason instanceof Error ? reason.message : "Goal could not be saved."); } }
-  return <section className="goal-setup"><div><p className="eyebrow">YOUR FIRST PLAN</p><h2>Set the finish line.</h2><p>Start with the race you are training for. Build every session around it, then measure each effort against your target.</p></div><form onSubmit={submit}><label>Goal name<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Autumn 10K" required /></label><label>Plan start date<input type="date" value={planStartDate} onChange={(event) => setPlanStartDate(event.target.value)} required /></label><label>Race date<input type="date" value={date} onChange={(event) => setDate(event.target.value)} required /></label><label>Distance (km)<input type="number" min="0.1" step="0.1" value={distance} onChange={(event) => setDistance(event.target.value)} required /></label><label>Target finish time <span className="optional">Optional</span><input value={targetTime} onChange={(event) => setTargetTime(event.target.value)} placeholder="00:50:00" /></label>{error && <p className="form-error" role="alert">{error}</p>}<button type="submit">Create goal</button></form></section>;
+  const [name, setName] = useState("");
+  const [date, setDate] = useState("");
+  const [planStartDate, setPlanStartDate] = useState(isoDate(new Date()));
+  const [distancePreset, setDistancePreset] = useState("10");
+  const [customDistance, setCustomDistance] = useState("");
+  const [targetTime, setTargetTime] = useState("");
+  const [error, setError] = useState("");
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    const distanceKm = distancePreset === "custom" ? Number(customDistance) : Number(distancePreset);
+    try {
+      onState(await window.trainingPlanner.createGoal({ name, raceDate: date, planStartDate, distanceKm, targetTime }));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Goal could not be saved.");
+    }
+  }
+
+  return (
+    <section className="goal-setup">
+      <div>
+        <p className="eyebrow">YOUR FIRST PLAN</p>
+        <h2>Set the finish line.</h2>
+        <p>Start with the race you are training for. Build every session around it, then measure each effort against your target.</p>
+      </div>
+      <form onSubmit={submit}>
+        <label>Goal name<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Autumn 10K" required /></label>
+        <label>Plan start date<input type="date" value={planStartDate} onChange={(event) => setPlanStartDate(event.target.value)} required /></label>
+        <label>Race date<input type="date" value={date} onChange={(event) => setDate(event.target.value)} required /></label>
+        <label>Race distance
+          <select value={distancePreset} onChange={(event) => { setDistancePreset(event.target.value); if (event.target.value !== "custom") setCustomDistance(""); }}>
+            {STANDARD_DISTANCES.map((d) => <option key={d.label} value={String(d.km)}>{d.label}</option>)}
+            <option value="custom">Custom</option>
+          </select>
+        </label>
+        {distancePreset === "custom" && <label>Custom distance (km)<input type="number" min="0.1" step="0.1" value={customDistance} onChange={(event) => setCustomDistance(event.target.value)} required /></label>}
+        <label><span>Target finish time <span className="optional">Optional</span></span><input value={targetTime} onChange={(event) => setTargetTime(event.target.value)} placeholder="00:50:00" /></label>
+        {error && <p className="form-error" role="alert">{error}</p>}
+        <button type="submit">Create goal</button>
+      </form>
+    </section>
+  );
 }
 
 function SessionPanel({ session, date, goalId, onClose, onState, onError, onLog }: { session?: Session; date: string; goalId: number; onClose: () => void; onState: (state: PlannerState) => void; onError: (message: string) => void; onLog: (session: Session) => void }) {

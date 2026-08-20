@@ -61,6 +61,18 @@ export function formatPace(distanceKm: number, durationSeconds: number): string 
 
 export function calculateTemplateTargets(segments: SessionTemplateSegment[]): { distanceKm: number; durationSeconds: number } {
   return segments.reduce((totals, segment) => {
+    if (segment.segment_type === "repeat" && segment.children?.length) {
+      const repeatCount = Number(segment.repeat_count || 1);
+      segment.children.forEach((child) => {
+        totals.distanceKm += Number(child.distance_km || 0) * repeatCount;
+        totals.durationSeconds += Number(child.duration_seconds || 0) * repeatCount;
+        if (child.include_recovery !== 0) {
+          totals.distanceKm += Number(child.rest_distance_km || 0) * repeatCount;
+          totals.durationSeconds += Number(child.rest_duration_seconds || 0) * repeatCount;
+        }
+      });
+      return totals;
+    }
     const multiplier = segment.segment_type === "repeat" ? Number(segment.repeat_count || 1) : 1;
     totals.distanceKm += Number(segment.distance_km || 0) * multiplier;
     totals.durationSeconds += Number(segment.duration_seconds || 0) * multiplier;
