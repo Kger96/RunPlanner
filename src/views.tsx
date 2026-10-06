@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Footprints, Pencil, Plus, SkipForward, Trophy, X } from "lucide-react";
+import { Footprints, Pencil, Plus, SkipForward, Trash2, Trophy, X } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { calculateDashboard, daysUntilRace, formatDate, formatDuration, formatPace, getPlanWeekRange, isoDate, weekStart } from "./domain";
-import type { GoalInput, PlannerState, RunInput, Session, SessionInput } from "./types";
-import { SessionPanelWithTemplates } from "./session-builder";
+import { calculateDashboard, daysUntilRace, formatDate, formatDuration, formatPace, isoDate, parseRunDuration } from "./domain";
+import type { GoalInput, PlannerState, Run, RunInput, Session, SessionInput } from "./types";
 
 const STANDARD_DISTANCES = [
   { label: "5K", km: 5 },
@@ -53,73 +52,15 @@ export function DashboardView({ state, onState, onPlanner }: { state: PlannerSta
   </section>;
 }
 
-export function PlannerView({ state, onState, onError }: { state: PlannerState; onState: (state: PlannerState) => void; onError: (message: string) => void }) {
-  const [monthOffset, setMonthOffset] = useState<number | null>(null);
-  const [selected, setSelected] = useState<{ session?: Session; date: string } | null>(null);
-  const [draggedId, setDraggedId] = useState<number | null>(null);
-  const [runSession, setRunSession] = useState<Session | null>(null);
-
-  if (!state.activeGoal) return <EmptyState title="Create a goal first" body="Your monthly plan will appear after you set a race goal." />;
-  const goal = state.activeGoal;
-  const today = new Date();
-  const todayIso = isoDate(today);
-
-  const planStart = new Date(`${goal.plan_start_date || goal.race_date}T12:00:00`);
-  const raceEnd = new Date(`${goal.race_date}T12:00:00`);
-  const baseYear = planStart.getFullYear();
-  const baseMonth = planStart.getMonth();
-  const maxOffset = (raceEnd.getFullYear() - baseYear) * 12 + (raceEnd.getMonth() - baseMonth);
-  const rawDefault = (today.getFullYear() - baseYear) * 12 + (today.getMonth() - baseMonth);
-  const active = monthOffset ?? Math.max(0, Math.min(rawDefault, maxOffset));
-
-  const displayYear = baseYear + Math.floor((baseMonth + active) / 12);
-  const displayMonth = (baseMonth + active) % 12;
-  const firstOfMonth = new Date(displayYear, displayMonth, 1);
-  const lastOfMonth = new Date(displayYear, displayMonth + 1, 0);
-  const leadingPad = (firstOfMonth.getDay() || 7) - 1;
-  const totalCells = Math.ceil((leadingPad + lastOfMonth.getDate()) / 7) * 7;
-  const cells = Array.from({ length: totalCells }, (_, i) => {
-    const d = i - leadingPad + 1;
-    return d >= 1 && d <= lastOfMonth.getDate() ? new Date(displayYear, displayMonth, d) : null;
-  });
-  const monthLabel = firstOfMonth.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
-
-  async function reschedule(id: number, scheduledDate: string) {
-    try { onState(await window.trainingPlanner.rescheduleSession({ id, scheduledDate })); setSelected(null); }
-    catch (error) { onError(error instanceof Error ? error.message : "Session could not be rescheduled."); }
-  }
-
-  const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
-  return <section className="planner">
-    <div className="planner-header"><div><p className="eyebrow">ACTIVE PLAN</p><h2>{goal.name}</h2></div><div className="week-controls"><button aria-label="Previous month" disabled={active === 0} onClick={() => setMonthOffset(active - 1)}><ChevronLeft /></button><strong className="month-label">{monthLabel}</strong><button aria-label="Next month" disabled={active === maxOffset} onClick={() => setMonthOffset(active + 1)}><ChevronRight /></button></div></div>
-    <div className="month-grid">
-      {dayNames.map((d) => <div key={d} className="month-day-name">{d}</div>)}
-      {cells.map((day, i) => {
-        if (!day) return <div key={`pad-${i}`} className="month-cell month-cell--pad" />;
-        const date = isoDate(day);
-        const inPlan = date >= (goal.plan_start_date || date) && date <= goal.race_date;
-        const sessions = state.sessions.filter((s) => s.scheduled_date === date);
-        const isToday = todayIso === date;
-        return <div key={date} className={`month-cell${inPlan ? "" : " month-cell--out"}${isToday ? " month-cell--today" : ""}`} onDragOver={(e) => { if (inPlan) e.preventDefault(); }} onDrop={() => { if (inPlan && draggedId) reschedule(draggedId, date); setDraggedId(null); }}>
-          <div className="month-cell-header">
-            <span className="month-day-num">{day.getDate()}</span>
-            {inPlan && <button className="add-session-icon" onClick={() => setSelected({ date })} aria-label={`Add session on ${date}`}><Plus size={12} /></button>}
-          </div>
-          <div className="month-sessions">{sessions.map((session) => { const typeClass = session.status === "scheduled" ? `type-${session.run_type.toLowerCase()}` : ""; return <button key={session.id} draggable={inPlan} onDragStart={() => setDraggedId(session.id)} className={`session-card ${session.status} ${typeClass}`} onClick={() => setSelected({ session, date })}><span>{session.status === "completed" ? "Completed" : session.status === "skipped" ? "Skipped" : session.run_type}</span><strong>{session.target_distance_km ? `${session.target_distance_km} km` : session.target_duration_seconds ? formatDuration(session.target_duration_seconds) : "Structured"}</strong></button>; })}</div>
-        </div>;
-      })}
-    </div>
-    <p className="planner-help">Dates outside the active plan are unavailable. Drag a session to another available day, or use the reschedule date in its detail panel.</p>
-    {selected && <SessionPanelWithTemplates session={selected.session} date={selected.date} goalId={goal.id} templates={state.templates} onClose={() => setSelected(null)} onState={onState} onError={onError} onLog={(session) => { setSelected(null); setRunSession(session); }} />}
-    {runSession && <RunEntryPanel session={runSession} onClose={() => setRunSession(null)} onState={onState} onError={onError} />}
-  </section>;
-}
-
 export function RunLogView({ state, onState, onError, openEntry, onEntryOpened }: { state: PlannerState; onState: (state: PlannerState) => void; onError: (message: string) => void; openEntry?: boolean; onEntryOpened?: () => void }) {
   const [entryOpen, setEntryOpen] = useState(false);
+  const [editingRun, setEditingRun] = useState<Run | null>(null);
   useEffect(() => { if (openEntry) { setEntryOpen(true); onEntryOpened?.(); } }, [openEntry, onEntryOpened]);
-  return <section className="run-log"><div className="list-header"><div><p className="eyebrow">ACTIVITY HISTORY</p><h2>Every effort counts.</h2></div><button onClick={() => setEntryOpen(true)}><Plus size={17} />Log a run</button></div>{state.runs.length ? <ul className="run-list">{state.runs.map((run) => <li key={run.id}><div className="activity-icon"><Footprints size={18} /></div><div><strong>{run.is_unplanned ? "Unplanned run" : "Planned workout"}</strong><span>{formatDate(run.completed_date, "long")} · {run.distance_km.toFixed(1)} km · {formatDuration(run.duration_seconds)}</span>{run.notes && <p>{run.notes}</p>}</div><div className="run-stat"><strong>{formatPace(run.distance_km, run.duration_seconds)}</strong><span>/km</span></div></li>)}</ul> : <EmptyState title="No runs logged" body="Use Log a run to record a planned or unplanned activity." action={() => setEntryOpen(true)} actionLabel="Log a run" />}{entryOpen && <RunEntryPanel onClose={() => setEntryOpen(false)} onState={onState} onError={onError} />}</section>;
+  async function deleteRun(run: Run) {
+    if (!window.confirm(`Delete the ${formatDate(run.completed_date, "long")} run? This cannot be undone.`)) return;
+    try { onState(await window.trainingPlanner.deleteRun(run.id)); } catch (reason) { onError(reason instanceof Error ? reason.message : "Run could not be deleted."); }
+  }
+  return <section className="run-log"><div className="list-header"><div><p className="eyebrow">ACTIVITY HISTORY</p><h2>Every effort counts.</h2></div><button onClick={() => setEntryOpen(true)}><Plus size={17} />Log a run</button></div>{state.runs.length ? <ul className="run-list">{state.runs.map((run) => <li key={run.id}><div className="activity-icon"><Footprints size={18} /></div><div><strong>{run.is_unplanned ? "Unplanned run" : "Planned workout"}</strong><span>{formatDate(run.completed_date, "long")} · {run.distance_km.toFixed(1)} km · {formatDuration(run.duration_seconds)}</span>{run.notes && <p>{run.notes}</p>}</div><div className="run-stat"><strong>{formatPace(run.distance_km, run.duration_seconds)}</strong><span>/km</span></div><div className="run-actions"><button type="button" className="icon-button" onClick={() => setEditingRun(run)} aria-label="Edit run"><Pencil size={15} /></button><button type="button" className="icon-button" onClick={() => deleteRun(run)} aria-label="Delete run"><Trash2 size={15} /></button></div></li>)}</ul> : <EmptyState title="No runs logged" body="Use Log a run to record a planned or unplanned activity." action={() => setEntryOpen(true)} actionLabel="Log a run" />}{entryOpen && <RunEntryPanel onClose={() => setEntryOpen(false)} onState={onState} onError={onError} />}{editingRun && <RunEntryPanel run={editingRun} onClose={() => setEditingRun(null)} onState={onState} onError={onError} />}</section>;
 }
 
 export function GoalHistoryView({ state, onCreate, onState, onError }: { state: PlannerState; onCreate: () => void; onState: (state: PlannerState) => void; onError: (message: string) => void }) {
@@ -268,10 +209,10 @@ function SessionPanel({ session, date, goalId, onClose, onState, onError, onLog 
   return <aside className="side-panel" aria-label={session ? "Session details" : "Add a session"}><header><div><p className="eyebrow">{session ? "SESSION DETAIL" : "NEW SESSION"}</p><h2>{session ? session.run_type : "Add a session"}</h2></div><button className="icon-button" onClick={onClose} aria-label="Close panel"><X /></button></header>{session ? <div className="session-detail"><dl><div><dt>Target distance</dt><dd>{session.target_distance_km} km</dd></div><div><dt>Pace range</dt><dd>{session.pace_low ? `${session.pace_low} - ${session.pace_high}/km` : "Not set"}</dd></div><div><dt>Status</dt><dd className="capitalize">{session.status}</dd></div></dl>{session.notes && <p className="notes">{session.notes}</p>}<label>Reschedule date<input type="date" value={scheduledDate} onChange={(event) => setScheduledDate(event.target.value)} /></label><button className="secondary-action" onClick={reschedule}>Reschedule</button>{session.status !== "completed" && session.status !== "skipped" && <><button className="primary-action" onClick={() => onLog(session)}>Log result</button><button className="skip-action" onClick={skip}><SkipForward size={16} />Mark skipped</button></>}</div> : <form onSubmit={create} className="session-form"><label>Session date<input type="date" value={scheduledDate} onChange={(event) => setScheduledDate(event.target.value)} required /></label><label>Run type<input value={runType} onChange={(event) => setRunType(event.target.value)} required /></label><label>Target distance (km)<input type="number" min="0.1" step="0.1" value={distance} onChange={(event) => setDistance(event.target.value)} required /></label><div className="field-row"><label>Fast pace<input placeholder="5:00" value={paceLow} onChange={(event) => setPaceLow(event.target.value)} /></label><label>Easy pace<input placeholder="5:30" value={paceHigh} onChange={(event) => setPaceHigh(event.target.value)} /></label></div><label>Notes<textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Workout details or interval structure" /></label><button className="primary-action" type="submit">Add session</button></form>}</aside>;
 }
 
-function RunEntryPanel({ session, onClose, onState, onError }: { session?: Session; onClose: () => void; onState: (state: PlannerState) => void; onError: (message: string) => void }) {
-  const [date, setDate] = useState(isoDate(new Date())); const [distance, setDistance] = useState(String(session?.target_distance_km || "")); const [duration, setDuration] = useState(""); const [rpe, setRpe] = useState(""); const [avgHr, setAvgHr] = useState(""); const [maxHr, setMaxHr] = useState(""); const [elevation, setElevation] = useState(""); const [notes, setNotes] = useState(""); const [error, setError] = useState("");
-  async function save(event: React.FormEvent) { event.preventDefault(); const [minutes, seconds = "0"] = duration.split(":"); const durationSeconds = Number(minutes) * 60 + Number(seconds); if (!(durationSeconds > 0)) { setError("Enter duration as minutes or minutes:seconds."); return; } try { const input: RunInput = { sessionId: session?.id, completedDate: date, distanceKm: Number(distance), durationSeconds, rpe: rpe ? Number(rpe) : undefined, avgHeartRate: avgHr ? Number(avgHr) : undefined, maxHeartRate: maxHr ? Number(maxHr) : undefined, elevationM: elevation ? Number(elevation) : undefined, notes }; onState(await window.trainingPlanner.logRun(input)); onClose(); } catch (reason) { onError(reason instanceof Error ? reason.message : "Run could not be saved."); } }
-  return <aside className="side-panel run-panel" aria-label="Log a run"><header><div><p className="eyebrow">{session ? "COMPLETE SESSION" : "UNPLANNED RUN"}</p><h2>{session ? session.run_type : "Log a run"}</h2></div><button className="icon-button" onClick={onClose} aria-label="Close panel"><X /></button></header>{session && <div className="planned-context">Planned: {session.target_distance_km} km {session.pace_low && `at ${session.pace_low}-${session.pace_high}/km`}</div>}<form onSubmit={save} className="session-form"><label>Completed date<input type="date" value={date} onChange={(event) => setDate(event.target.value)} required /></label><div className="field-row"><label>Actual distance (km)<input type="number" min="0.1" step="0.1" value={distance} onChange={(event) => setDistance(event.target.value)} required /></label><label>Duration (mm:ss)<input placeholder="42:30" value={duration} onChange={(event) => setDuration(event.target.value)} required /></label></div><div className="field-row"><label>Perceived effort (1-10)<input type="number" min="1" max="10" value={rpe} onChange={(event) => setRpe(event.target.value)} /></label><label>Elevation gain (m)<input type="number" min="0" value={elevation} onChange={(event) => setElevation(event.target.value)} /></label></div><div className="field-row"><label>Average HR<input type="number" min="1" value={avgHr} onChange={(event) => setAvgHr(event.target.value)} /></label><label>Maximum HR<input type="number" min="1" value={maxHr} onChange={(event) => setMaxHr(event.target.value)} /></label></div><label>Notes<textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="How did it feel?" /></label>{error && <p className="form-error" role="alert">{error}</p>}<button className="primary-action" type="submit">Save run</button></form></aside>;
+export function RunEntryPanel({ session, run, defaultDate, onClose, onState, onError }: { session?: Session; run?: Run; defaultDate?: string; onClose: () => void; onState: (state: PlannerState) => void; onError: (message: string) => void }) {
+  const [date, setDate] = useState(run?.completed_date ?? defaultDate ?? isoDate(new Date())); const [distance, setDistance] = useState(run ? String(run.distance_km) : String(session?.target_distance_km || "")); const [duration, setDuration] = useState(run ? formatDuration(run.duration_seconds) : ""); const [rpe, setRpe] = useState(run?.rpe ? String(run.rpe) : ""); const [avgHr, setAvgHr] = useState(run?.avg_heart_rate ? String(run.avg_heart_rate) : ""); const [maxHr, setMaxHr] = useState(run?.max_heart_rate ? String(run.max_heart_rate) : ""); const [elevation, setElevation] = useState(run?.elevation_m ? String(run.elevation_m) : ""); const [notes, setNotes] = useState(run?.notes ?? ""); const [error, setError] = useState("");
+  async function save(event: React.FormEvent) { event.preventDefault(); const durationSeconds = parseRunDuration(duration); if (!durationSeconds) { setError("Enter duration as hh:mm:ss, mm:ss or minutes."); return; } try { const input: RunInput = { sessionId: session?.id, completedDate: date, distanceKm: Number(distance), durationSeconds, rpe: rpe ? Number(rpe) : undefined, avgHeartRate: avgHr ? Number(avgHr) : undefined, maxHeartRate: maxHr ? Number(maxHr) : undefined, elevationM: elevation ? Number(elevation) : undefined, notes }; onState(run ? await window.trainingPlanner.updateRun({ ...input, id: run.id }) : await window.trainingPlanner.logRun(input)); onClose(); } catch (reason) { onError(reason instanceof Error ? reason.message : "Run could not be saved."); } }
+  return <aside className="side-panel run-panel" aria-label="Log a run"><header><div><p className="eyebrow">{run ? "EDIT ACTIVITY" : session ? "COMPLETE SESSION" : "UNPLANNED RUN"}</p><h2>{run ? "Edit run" : session ? session.run_type : "Log a run"}</h2></div><button className="icon-button" onClick={onClose} aria-label="Close panel"><X /></button></header>{session && <div className="planned-context">Planned: {session.target_distance_km} km {session.pace_low && `at ${session.pace_low}-${session.pace_high}/km`}</div>}<form onSubmit={save} className="session-form"><label>Completed date<input type="date" value={date} onChange={(event) => setDate(event.target.value)} required /></label><div className="field-row"><label>Actual distance (km)<input type="number" min="0.1" step="0.1" value={distance} onChange={(event) => setDistance(event.target.value)} required /></label><label>Duration (hh:mm:ss)<input placeholder="01:05:30" value={duration} onChange={(event) => setDuration(event.target.value)} required /></label></div><div className="field-row"><label>Perceived effort (1-10)<input type="number" min="1" max="10" value={rpe} onChange={(event) => setRpe(event.target.value)} /></label><label>Elevation gain (m)<input type="number" min="0" value={elevation} onChange={(event) => setElevation(event.target.value)} /></label></div><div className="field-row"><label>Average HR<input type="number" min="1" value={avgHr} onChange={(event) => setAvgHr(event.target.value)} /></label><label>Maximum HR<input type="number" min="1" value={maxHr} onChange={(event) => setMaxHr(event.target.value)} /></label></div><label>Notes<textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="How did it feel?" /></label>{error && <p className="form-error" role="alert">{error}</p>}<button className="primary-action" type="submit">{run ? "Save changes" : "Save run"}</button></form></aside>;
 }
 
 function Progress({ value, label }: { value: number; label: string }) { return <div className="progress" aria-label={label}><i style={{ width: `${value}%` }} /></div>; }

@@ -1,5 +1,293 @@
 # Bug Log
 
+## BUG-20261006-002: Logging a run with a duration of 1 hour or more produces an incorrect duration and pace
+
+- **Reported:** 2026-10-06
+- **Severity:** High
+- **Status:** Resolved
+- **Area:** Log a run (duration entry)
+- **Environment:** Not provided
+- **Impact:** Runners completing an activity lasting 1 hour or longer cannot log the correct duration; the saved duration and resulting pace are wrong, affecting activity history and pace-based metrics.
+
+### Summary
+The "Log a run" duration field only parses a `minutes:seconds` pair: `save()` in `RunEntryPanel` does `const [minutes, seconds = "0"] = duration.split(":")`, which only reads the first two colon-separated parts. If a user enters a hours-style value (e.g. `1:00:00` for one hour), the extra segment is silently ignored and the value is misread as `1` minute `00` seconds, producing a `durationSeconds` far shorter than actual. This in turn makes `formatPace`/`formatDuration`-derived pace calculations incorrect. There is no input affordance or validation indicating hours are unsupported.
+
+### Steps to Reproduce
+1. Open "Log a run" (or complete a planned session).
+2. Enter a distance and set Duration to a value representing 1 hour or more (e.g. `1:00:00`).
+3. Save the run and observe the recorded duration and calculated pace.
+
+### Expected Behaviour
+Entering a duration of 1 hour or more should be supported and result in the correct total duration being saved, with pace calculated from the correct value.
+
+### Actual Behaviour
+Durations of 1 hour or more are misparsed, producing an incorrect (much shorter) saved duration and an incorrect pace.
+
+### Evidence
+- User report: "When logging an activity it should be possible to enter a duration longer than 59min 59sec. Currently that is the limit and if I enter 1hr or above then this affects the pace calculation etc."
+- Code reference: [views.tsx](src/views.tsx#L273) (`const [minutes, seconds = "0"] = duration.split(":")` only handles two segments; a third segment for hours is dropped).
+- Code reference: [domain.ts](src/domain.ts#L58) (`formatPace` divides the resulting, potentially incorrect, `durationSeconds` by distance).
+
+### Triage Notes
+- Reproducibility: Always (for any duration entered in an hours-inclusive format)
+- Workaround: None known
+- Suspected cause: `RunEntryPanel.save()` split the value on `:` and only read the first two parts.
+- Missing information: None
+- Resolution: Added shared `parseRunDuration` in `src/domain.ts` (accepts `m`, `mm:ss`, `h:mm:ss`; rejects malformed values and minutes/seconds above 59 when more than one part is given). `RunEntryPanel.save()` now uses it; label, placeholder and error text updated to mention hours. A bare number is treated as minutes.
+- Validation: Added unit tests in `src/domain.test.ts`; `npx tsc --noEmit` and `npx vitest run` pass (9 tests).
+
+## BUG-20261006-001: Logged activities cannot be edited or deleted after being recorded
+
+- **Reported:** 2026-10-06
+- **Severity:** Medium
+- **Status:** Resolved
+- **Area:** Activity History / Run Log
+- **Environment:** Not provided
+- **Impact:** Runners who log an activity with incorrect information (e.g. wrong date, distance, duration) cannot correct or remove it; the mistake permanently remains in the planner/activity history.
+
+### Summary
+The Activity History list (`RunLogView`) renders each logged run as a static `<li>` with no click, edit, or delete control, and there is no update/delete method for runs (`logRun` only creates new entries; no `editRun`/`updateRun`/`deleteRun` API exists). Once a run is logged, its details cannot be changed or removed.
+
+### Steps to Reproduce
+1. Log an activity with an incorrect value (e.g. wrong date or distance).
+2. Open the Activity History (Run Log) list.
+3. Attempt to edit or delete the logged entry.
+
+### Expected Behaviour
+A logged activity should be editable (e.g. date, distance, duration, and other recorded fields) and deletable, so incorrect entries can be corrected or removed without permanently skewing planner history.
+
+### Actual Behaviour
+Logged activities are displayed as read-only list items with no way to edit or delete their recorded information.
+
+### Evidence
+- User report: "When logging an activity, it should be possible to edit the activity in case any information was entered incorrectly such as date, distance etc. Currently this is not possible so permanently affects the planner history." Confirmed in follow-up that deleting should also be supported.
+- Code reference: [views.tsx](src/views.tsx#L119) (`RunLogView` renders `run-list` items as static text with no edit or delete action).
+- Code reference: [types.ts](src/types.ts#L143) (only `logRun` is defined; no update or delete method for an existing run).
+
+### Triage Notes
+- Reproducibility: Always
+- Workaround: None known
+- Suspected cause: No `updateRun`/`deleteRun` API existed and `RunLogView` rendered runs as read-only items.
+- Missing information: None
+- Resolution: Added `updateRun` and `deleteRun` to `window.trainingPlanner` (`src/types.ts`, `src/browser-api.ts`). Each activity in the Run log now has Edit and Delete buttons. Edit reuses `RunEntryPanel` pre-filled with the run's values. Delete asks for confirmation, and deleting the only result for a planned session returns that session to scheduled/rescheduled status.
+- Validation: `npx tsc --noEmit` and `npx vitest run` pass. Not yet checked manually in the browser.
+
+## BUG-20260928-006: Planner session detail panel does not show the structured segment breakdown for sessions created from a saved template
+
+- **Reported:** 2026-09-28
+- **Severity:** Medium
+- **Status:** Resolved
+- **Area:** Planner (session detail panel)
+- **Environment:** Not provided
+- **Impact:** Runners who scheduled a session from a saved custom template (e.g. containing warm-up/interval/rest/cool-down segments) cannot see that structure from the planner; they only see the same generic distance/duration/pace/status fields shown for every session, regardless of whether a template was used.
+
+### Summary
+The Planner's session detail panel (`SessionPanelWithTemplates`, session view) always renders the same fixed fields — Target distance, Target duration, Pace range, Status — even when the session has a `template_id` referencing a saved session template with structured segments (warm-up, repeats, rest, cool-down). The segment structure and per-segment breakdown (available via `segmentDescription`/`SessionTemplate.segments` in the Session Builder) is not surfaced here, so users must return to the Session Builder to see the workout's structure.
+
+### Steps to Reproduce
+1. In the Session Builder, create and save a structured session template (e.g. with warm-up, interval repeats, and cool-down segments).
+2. On the Planner, add a session and select that saved template as the run type.
+3. Open the session's detail panel from the planner day cell.
+4. Observe the fields shown.
+
+### Expected Behaviour
+When a scheduled session originates from a saved template with structured segments, the session detail panel should display that segment structure (e.g. warm-up, repeat/interval, rest, cool-down details) so the user can see the full planned workout without leaving the planner.
+
+### Actual Behaviour
+The session detail panel only ever shows Target distance, Target duration, Pace range, and Status — the same generic fields regardless of whether the session came from a structured template.
+
+### Evidence
+- User report: "When viewing a session from within the planner view the details are always the same. However, if importing a saved session with intervals etc then these must be displayed here... Currently they can only see the target distance."
+- Code reference: [session-builder.tsx](src/session-builder.tsx#L234) (`SessionPanelWithTemplates` session-detail branch renders only the fixed `<dl>` fields; no lookup of `session.template_id` against `templates` or rendering of segments).
+- Code reference: [types.ts](src/types.ts#L27) (`Session.template_id` exists, confirming the link to a template is available but unused in the detail view).
+
+### Triage Notes
+- Reproducibility: Always
+- Workaround: Return to the Session Builder tab to view the saved template's segment structure.
+- Suspected cause: The session-detail branch of `SessionPanelWithTemplates` never looked up `session.template_id` in `templates`, so no segments were rendered.
+- Missing information: None
+- Resolution: In `src/session-builder.tsx`, the session detail panel now looks up the linked template and shows a "Workout structure" list (warm up, run repeats with count, per-run target/pace and recovery, rest, cool down). Styles added in `src/styles.css`. The panel is unchanged for sessions without a template, or whose template has been deleted.
+- Validation: `npx tsc --noEmit` and `npx vitest run` pass (10 tests). Not checked manually in a browser.
+
+## BUG-20260928-005: Settings page appearance options ("System, Light, Dark") overflow their container on mobile
+
+- **Reported:** 2026-09-28
+- **Severity:** Low
+- **Status:** Resolved
+- **Area:** Settings page (Appearance section)
+- **Environment:** Mobile device (specific OS/browser/viewport width not provided)
+- **Impact:** Runners viewing Settings on a mobile device see the "System", "Light", "Dark" theme options extend beyond the appearance block instead of fitting within it.
+
+### Summary
+On the Settings page, the `.theme-options` row is a non-wrapping flex container (`display: flex; gap: 10px`) with no responsive rule to stack or wrap the options on narrow viewports, so the three appearance options overflow the surrounding `.settings-view` block on mobile widths.
+
+### Steps to Reproduce
+1. Open the Settings page on a mobile device (narrow viewport).
+2. View the "Appearance" section.
+3. Observe the "System", "Light", "Dark" options relative to the block containing them.
+
+### Expected Behaviour
+The appearance options should fit within the settings block on mobile widths, wrapping or stacking as needed.
+
+### Actual Behaviour
+The appearance options overflow the appearance block on mobile widths.
+
+### Evidence
+- User report: "On the settings page when using a mobile device, the appearance options \"System, Light, Dark\" overflow the appearance block."
+- Code reference: [styles.css](src/styles.css#L34) (`.theme-options { display: flex; gap: 10px; ... }`, no `flex-wrap` and not included in any `@media` rule).
+
+### Triage Notes
+- Reproducibility: Unknown
+- Workaround: None known
+- Suspected cause: `.theme-options` was a non-wrapping flex row, and the global `input` padding made each radio option wider than needed.
+- Missing information: Specific mobile device, OS, browser, and viewport width.
+- Resolution: In `src/styles.css`, `.theme-options` now uses `flex-wrap: wrap`, and the radio inputs are sized to 16px with no padding so each option is compact.
+- Validation: CSS-only change; not yet checked manually on a mobile viewport.
+
+## BUG-20260928-004: Session builder distance fields will not accept a leading 0 (e.g. cannot type "0.4")
+
+- **Reported:** 2026-09-28
+- **Severity:** Medium
+- **Status:** Resolved
+- **Area:** Session Builder (segment and repeat-child distance inputs)
+- **Environment:** Not provided
+- **Impact:** Runners cannot enter sub-1 km distances (e.g. 0.4 km) using the natural "0.4" input; only the ".4" portion is retained.
+
+### Summary
+The distance number inputs in the Session Builder render their value as `segment.distance_km || ""` (and the equivalent for repeat-child and recovery distance fields). Because `0` is falsy, as soon as the field's numeric value becomes `0` (e.g. after typing a leading "0"), the displayed value collapses back to an empty string, preventing a leading "0" from being kept while typing a decimal such as "0.4".
+
+### Steps to Reproduce
+1. Open the Session Builder tab.
+2. In a segment's Distance field (or a repeat run/recovery distance field), attempt to type `0.4`.
+3. Observe that typing `0` is immediately cleared, so only `.4` remains enterable.
+
+### Expected Behaviour
+Typing `0.4` in a distance field should retain the leading `0` and display `0.4` as entered.
+
+### Actual Behaviour
+The leading `0` is not accepted/retained; only the digits after the decimal point remain in the field.
+
+### Evidence
+- User report: "When entering a distance value in the session builder it does not currently allow for entering a 0 as the first number. If needing to enter 0.4 then it only accepts the .4 but it should be entered by a 0 first."
+- Code reference: [session-builder.tsx](src/session-builder.tsx#L152) (segment distance input: `value={segment.distance_km || ""}`).
+- Code reference: [session-builder.tsx](src/session-builder.tsx#L173) (repeat-child distance input, same pattern).
+- Code reference: [session-builder.tsx](src/session-builder.tsx#L188) (recovery distance input, same pattern).
+
+### Triage Notes
+- Reproducibility: Always
+- Workaround: Type the decimal portion first (e.g. ".4") then the value can be saved, though the leading zero is never visibly entered.
+- Suspected cause: The inputs used `value={... || ""}`, so a numeric `0` rendered as an empty string and the typed leading zero was discarded.
+- Missing information: None
+- Resolution: In `src/session-builder.tsx`, the segment, repeat-child and recovery distance inputs now use `?? ""`, so `0` is displayed while typing.
+- Validation: `npx tsc --noEmit` and `npx vitest run` pass; not checked manually in a browser.
+
+## BUG-20260928-003: Session total distance is not rounded to 2 decimal places, and the unrounded value carries into the planner
+
+- **Reported:** 2026-09-28
+- **Severity:** Low
+- **Status:** Resolved
+- **Area:** Session Builder / Add a session (template distance calculation)
+- **Environment:** Not provided
+- **Impact:** Runners selecting a custom session template see (and save) a target distance with more than 2 decimal places, which then displays on the planner in the same unrounded form.
+
+### Summary
+When a custom session template is selected as the run type on the "Add a session" panel, `calculateTemplateTargets` sums segment distances without rounding. The resulting unrounded value is used to prefill the target-distance field, is saved with the session, and is subsequently shown as-is on the Planner day cell and session detail views.
+
+### Steps to Reproduce
+1. Open the Session Builder tab and build/save a template whose segment distances sum to a value with more than 2 decimal places (e.g. due to repeat-count multiplication or floating-point addition).
+2. Open the Planner, add a session, and select that template as the run type.
+3. Observe the auto-filled "Target distance (km)" value, save the session, and observe the distance shown on the planner day cell.
+
+### Expected Behaviour
+The calculated total distance should be rounded to a maximum of 2 decimal places when it is calculated for a template-based session, and that 2-decimal-place value should be what is saved and displayed on the planner.
+
+### Actual Behaviour
+The total distance from `calculateTemplateTargets` is used unrounded to prefill the distance field; this unrounded value is then saved and displayed unrounded on the planner.
+
+### Evidence
+- User report: "When a session is created and it calculates the total distance of the session. Ensure it is to 2 decimal places maximum. And this 2dp is kept when adding a session to the planner."
+- Code reference: [domain.ts](src/domain.ts#L62) (`calculateTemplateTargets` accumulates `distanceKm` with no rounding).
+- Code reference: [session-builder.tsx](src/session-builder.tsx#L206) (`setDistance(targets.distanceKm ? String(targets.distanceKm) : "")` uses the unrounded total to prefill the session form).
+- Code reference: [views.tsx](src/views.tsx#L109) (planner day cell displays `session.target_distance_km` as saved, with no rounding).
+
+### Triage Notes
+- Reproducibility: Always (for templates whose segment math produces more than 2 decimal places)
+- Workaround: Manually edit the "Target distance (km)" field before saving the session.
+- Suspected cause: `calculateTemplateTargets` summed floating-point distances without rounding.
+- Missing information: None
+- Resolution: In `src/domain.ts`, `calculateTemplateTargets` now rounds the total distance to 2 decimal places. The rounded value prefills the session form, so it is saved and shown on the planner.
+- Validation: Added a unit test for rounding; `npx tsc --noEmit` and `npx vitest run` pass (10 tests). Not checked manually in a browser.
+
+## BUG-20260928-002: Saved session templates cannot be edited or deleted after creation
+
+- **Reported:** 2026-09-28
+- **Severity:** Medium
+- **Status:** Resolved
+- **Area:** Session Builder (saved session templates)
+- **Environment:** Not provided
+- **Impact:** Runners who created a reusable session template cannot correct, adjust, or remove it afterwards; they must live with the template as originally saved.
+
+### Summary
+On the Session Builder tab, once a session template has been saved it appears in the "Saved sessions" list, but there is no way to edit or delete it. There is no update/delete API method (`createSessionTemplate` exists but no corresponding edit or delete method) and the saved-sessions list renders each entry as static text with no edit or delete control.
+
+### Steps to Reproduce
+1. Open the Session Builder tab.
+2. Build and save a session template.
+3. Attempt to modify or remove the saved session from the "Saved sessions" list.
+
+### Expected Behaviour
+A saved session template should be editable (e.g. an edit action on each entry in the "Saved sessions" list that loads it back into the builder for changes) and deletable (e.g. a delete action that removes it from the list).
+
+### Actual Behaviour
+The "Saved sessions" list only displays the template name and segment summary as static text, with no edit or delete control, and no update/delete method exists to persist changes to or remove an existing template.
+
+### Evidence
+- User report: "On the session builder tab. After a session has been created it currently does not allow you to edit the saved sessions." Confirmed in follow-up that deleting should also be supported.
+- Code reference: [session-builder.tsx](src/session-builder.tsx#L92) (saved-sessions list rendered as static `<li>` text, no edit or delete action).
+- Code reference: [browser-api.ts](src/browser-api.ts#L74) (only `createSessionTemplate` is implemented; no update or delete method).
+
+### Triage Notes
+- Reproducibility: Always
+- Workaround: None known; the only option is to create a new template.
+- Suspected cause: Only `createSessionTemplate` existed in the API and the saved-sessions list rendered static text with no controls.
+- Missing information: None
+- Resolution: Added `updateSessionTemplate` and `deleteSessionTemplate` to `src/browser-api.ts` and `src/types.ts`. Each saved session now has Edit and Delete buttons; Edit loads the template into the builder form (button becomes "Update reusable session", with a "Cancel editing" button), and Delete asks for confirmation. Deleting a template unlinks it from planner sessions that used it, which keep their saved targets. Duplicate-name validation ignores the template being edited.
+- Validation: `npx tsc --noEmit` and `npx vitest run` pass (10 tests). Not checked manually in a browser.
+
+## BUG-20260928-001: Planner month-view daily cells truncate session text on mobile widths
+
+- **Reported:** 2026-09-28
+- **Severity:** Medium
+- **Status:** Resolved
+- **Area:** Planner month view (daily cells)
+- **Environment:** Mobile device (specific OS/browser/viewport width not provided)
+- **Impact:** Runners viewing the planner on a mobile device cannot fully read session information (e.g. run type, distance/duration) shown inside a day cell.
+
+### Summary
+On the Planner page, the daily calendar cells are too narrow on mobile screen widths to fit the session text they contain, causing the text to appear cut off.
+
+### Steps to Reproduce
+1. Open the Planner page on a mobile device (narrow viewport).
+2. View a month containing scheduled sessions.
+3. Observe the text inside a day cell for a scheduled session.
+
+### Expected Behaviour
+Session text within each daily cell should be fully readable on mobile screen widths, without being visually cut off.
+
+### Actual Behaviour
+The daily cells are too narrow for the session text at mobile widths, so the text appears cut off/truncated.
+
+### Evidence
+- User report: "On the planner page if using a mobile, the daily cells are too narrow for the text and it appears cut off."
+
+### Triage Notes
+- Reproducibility: Unknown
+- Workaround: Tap/click the session card to open its detail panel, which shows the full session information.
+- Suspected cause: `Not investigated`
+- Missing information: Specific mobile device, OS, browser, and viewport width; whether the issue occurs on all sessions or only certain run types/text lengths.
+- Resolution: The planner was redesigned as a Week/Month calendar (`src/planner-calendar.tsx`). Day cells now show only the date number and coloured activity dots, so no session text is truncated. Full session details are shown in the detail area below the calendar when a day is selected.
+- Validation: `npx tsc --noEmit` and `npx vitest run` pass (10 tests). Not checked manually in a browser.
+
 ## BUG-20260803-001: Dashboard displays unnecessary race-day countdown text
 
 - **Reported:** 2026-08-03

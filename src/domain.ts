@@ -55,12 +55,23 @@ export function formatDuration(totalSeconds: number): string {
     : `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
+// Accepts "m", "mm:ss" or "hh:mm:ss" (hours may be 1+ digits); returns null when invalid.
+export function parseRunDuration(value: string): number | null {
+  const parts = value.trim().split(":");
+  if (parts.length > 3 || parts.some((part) => !/^\d+$/.test(part))) return null;
+  const numbers = parts.map(Number);
+  if (numbers.length > 1 && numbers.slice(1).some((n) => n > 59)) return null;
+  const [hours, minutes, seconds] = numbers.length === 3 ? numbers : [0, ...numbers, 0].slice(0, 3);
+  const total = hours * 3600 + minutes * 60 + seconds;
+  return total > 0 ? total : null;
+}
+
 export function formatPace(distanceKm: number, durationSeconds: number): string {
   return formatDuration(Math.round(durationSeconds / distanceKm));
 }
 
 export function calculateTemplateTargets(segments: SessionTemplateSegment[]): { distanceKm: number; durationSeconds: number } {
-  return segments.reduce((totals, segment) => {
+  const totals = segments.reduce((totals, segment) => {
     if (segment.segment_type === "repeat" && segment.children?.length) {
       const repeatCount = Number(segment.repeat_count || 1);
       segment.children.forEach((child) => {
@@ -82,6 +93,7 @@ export function calculateTemplateTargets(segments: SessionTemplateSegment[]): { 
     }
     return totals;
   }, { distanceKm: 0, durationSeconds: 0 });
+  return { ...totals, distanceKm: Math.round(totals.distanceKm * 100) / 100 };
 }
 
 function sumDistance<T extends object>(items: T[], field: keyof T): number {

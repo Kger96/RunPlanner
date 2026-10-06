@@ -1,4 +1,4 @@
-import type { EditPlanInput, Goal, GoalInput, PlannerState, Run, RunInput, Session, SessionInput, SessionTemplate, SessionTemplateInput, Theme } from "./types";
+import type { EditPlanInput, Goal, GoalInput, PlannerState, Run, RunInput, Session, SessionInput, SessionTemplate, SessionTemplateInput, Theme, UpdateRunInput, UpdateSessionTemplateInput } from "./types";
 
 const storageKey = "training-planner-state-v2";
 const legacyStorageKey = "training-planner-preview-state";
@@ -24,6 +24,15 @@ function normalizeState(value: Partial<PlannerState>): PlannerState {
       }),
     })),
   };
+}
+
+function validateTemplateInput(input: SessionTemplateInput, templates: SessionTemplate[], ignoreId?: number) {
+  if (!input.name.trim() || !input.segments.length) throw new Error("A template name and at least one segment are required.");
+  if (input.segments.some((segment) => {
+    if (segment.segment_type === "repeat" && segment.children?.length) return segment.children.some((child) => !(child.distance_km && child.distance_km > 0) && !(child.duration_seconds && child.duration_seconds > 0));
+    return !(segment.distance_km && segment.distance_km > 0) && !(segment.duration_seconds && segment.duration_seconds > 0);
+  })) throw new Error("Every segment needs a distance or duration.");
+  if (templates.some((template) => template.id !== ignoreId && template.name.toLowerCase() === input.name.trim().toLowerCase())) throw new Error("A session template with this name already exists.");
 }
 
 function readState(): PlannerState {
@@ -72,15 +81,23 @@ window.trainingPlanner = {
     return writeState({ ...state, sessions: [...state.sessions, session] });
   },
   createSessionTemplate: async (input: SessionTemplateInput) => {
-    if (!input.name.trim() || !input.segments.length) throw new Error("A template name and at least one segment are required.");
-    if (input.segments.some((segment) => {
-      if (segment.segment_type === "repeat" && segment.children?.length) return segment.children.some((child) => !(child.distance_km && child.distance_km > 0) && !(child.duration_seconds && child.duration_seconds > 0));
-      return !(segment.distance_km && segment.distance_km > 0) && !(segment.duration_seconds && segment.duration_seconds > 0);
-    })) throw new Error("Every segment needs a distance or duration.");
     const state = readState();
-    if (state.templates.some((template) => template.name.toLowerCase() === input.name.trim().toLowerCase())) throw new Error("A session template with this name already exists.");
+    validateTemplateInput(input, state.templates);
     const template: SessionTemplate = { id: nextId(state.templates), name: input.name.trim(), notes: input.notes?.trim() || null, segments: input.segments.map((segment, position) => ({ ...segment, id: position + 1, position })) };
     return writeState({ ...state, templates: [...state.templates, template] });
+  },
+  updateSessionTemplate: async (input: UpdateSessionTemplateInput) => {
+    const state = readState();
+    if (!state.templates.some((template) => template.id === input.id)) throw new Error("Session template not found.");
+    validateTemplateInput(input, state.templates, input.id);
+    const updated: SessionTemplate = { id: input.id, name: input.name.trim(), notes: input.notes?.trim() || null, segments: input.segments.map((segment, position) => ({ ...segment, id: position + 1, position })) };
+    return writeState({ ...state, templates: state.templates.map((template) => template.id === input.id ? updated : template) });
+  },
+  deleteSessionTemplate: async (id: number) => {
+    const state = readState();
+    if (!state.templates.some((template) => template.id === id)) throw new Error("Session template not found.");
+    // Sessions already created from the template keep their saved targets but lose the link.
+    return writeState({ ...state, templates: state.templates.filter((template) => template.id !== id), sessions: state.sessions.map((session) => session.template_id === id ? { ...session, template_id: null } : session) });
   },
   rescheduleSession: async ({ id, scheduledDate }) => {
     const state = readState();
@@ -98,6 +115,21 @@ window.trainingPlanner = {
     const state = readState();
     const run: Run = { id: nextId(state.runs), session_id: input.sessionId || null, completed_date: input.completedDate, distance_km: input.distanceKm, duration_seconds: input.durationSeconds, rpe: input.rpe || null, avg_heart_rate: input.avgHeartRate || null, max_heart_rate: input.maxHeartRate || null, elevation_m: input.elevationM || null, notes: input.notes?.trim() || null, is_unplanned: input.sessionId ? 0 : 1 };
     return writeState({ ...state, runs: [...state.runs, run], sessions: state.sessions.map((session) => session.id === input.sessionId ? { ...session, status: "completed" } : session) });
+  },
+  updateRun: async (input: UpdateRunInput) => {
+    if (!input.completedDate || !(input.distanceKm > 0) || !(input.durationSeconds > 0)) throw new Error("Date, distance and duration are required, and distance and duration must be greater than zero.");
+    const state = readState();
+    if (!state.runs.some((run) => run.id === input.id)) throw new Error("Run not found.");
+    return writeState({ ...state, runs: state.runs.map((run) => run.id === input.id ? { ...run, completed_date: input.completedDate, distance_km: input.distanceKm, duration_seconds: input.durationSeconds, rpe: input.rpe || null, avg_heart_rate: input.avgHeartRate || null, max_heart_rate: input.maxHeartRate || null, elevation_m: input.elevationM || null, notes: input.notes?.trim() || null } : run) });
+  },
+  deleteRun: async (id: number) => {
+    const state = readState();
+    const run = state.runs.find((candidate) => candidate.id === id);
+    if (!run) throw new Error("Run not found.");
+    const runs = state.runs.filter((candidate) => candidate.id !== id);
+    const reopen = run.session_id !== null && !runs.some((candidate) => candidate.session_id === run.session_id);
+    // Deleting the only result for a session returns that session to the planner as not yet done.
+    return writeState({ ...state, runs, sessions: state.sessions.map((session) => reopen && session.id === run.session_id ? { ...session, status: session.original_date ? "rescheduled" : "scheduled" } : session) });
   },
   setTheme: async (theme: Theme) => writeState({ ...readState(), theme }),
   cancelPlan: async () => {

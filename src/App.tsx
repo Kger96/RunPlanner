@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Activity, CalendarDays, Dumbbell, Flag, Settings, Trophy } from "lucide-react";
 import type { PlannerState, Theme } from "./types";
-import { DashboardView, GoalHistoryView, PlannerView, RunLogView } from "./views";
+import { DashboardView, GoalHistoryView, RunLogView } from "./views";
+import { PlannerView } from "./planner-calendar";
 import { SessionBuilderView } from "./session-builder";
 
 type View = "Dashboard" | "Planner" | "Session builder" | "Run log" | "Goals & history" | "Settings";

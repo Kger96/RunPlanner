@@ -110,6 +110,10 @@ export interface SessionTemplateInput {
   segments: SessionTemplateSegment[];
 }
 
+export interface UpdateSessionTemplateInput extends SessionTemplateInput {
+  id: number;
+}
+
 export interface RunInput {
   sessionId?: number;
   completedDate: string;
@@ -120,6 +124,10 @@ export interface RunInput {
   maxHeartRate?: number;
   elevationM?: number;
   notes?: string;
+}
+
+export interface UpdateRunInput extends RunInput {
+  id: number;
 }
 
 export interface EditPlanInput {
@@ -138,9 +146,13 @@ declare global {
       createGoal: (input: GoalInput) => Promise<PlannerState>;
       createSession: (input: SessionInput) => Promise<PlannerState>;
       createSessionTemplate: (input: SessionTemplateInput) => Promise<PlannerState>;
+      updateSessionTemplate: (input: UpdateSessionTemplateInput) => Promise<PlannerState>;
+      deleteSessionTemplate: (id: number) => Promise<PlannerState>;
       rescheduleSession: (input: { id: number; scheduledDate: string }) => Promise<PlannerState>;
       skipSession: (id: number) => Promise<PlannerState>;
       logRun: (input: RunInput) => Promise<PlannerState>;
+      updateRun: (input: UpdateRunInput) => Promise<PlannerState>;
+      deleteRun: (id: number) => Promise<PlannerState>;
       setTheme: (theme: Theme) => Promise<PlannerState>;
       cancelPlan: () => Promise<PlannerState>;
       editPlan: (input: EditPlanInput) => Promise<PlannerState>;

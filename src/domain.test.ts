@@ -1,10 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { calculateDashboard, calculateTemplateTargets, daysUntilRace, formatDuration, formatPace, getPlanWeekRange, isoDate } from "./domain";
+import { calculateDashboard, calculateTemplateTargets, daysUntilRace, formatDuration, formatPace, getPlanWeekRange, isoDate, parseRunDuration } from "./domain";
 import type { PlannerState } from "./types";
 
 describe("run metrics", () => {
   it("formats a duration with seconds padded", () => {
     expect(formatDuration(2525)).toBe("42:05");
+  });
+
+  it("parses run durations of an hour or more", () => {
+    expect(parseRunDuration("1:05:30")).toBe(3930);
+    expect(parseRunDuration("01:05:30")).toBe(3930);
+    expect(parseRunDuration("10:10:10")).toBe(36610);
+    expect(parseRunDuration("42:30")).toBe(2550);
+    expect(parseRunDuration("45")).toBe(2700);
+    expect(parseRunDuration("1:60:00")).toBeNull();
+    expect(parseRunDuration("abc")).toBeNull();
   });
 
   it("calculates metric pace from distance and duration", () => {
@@ -58,5 +68,14 @@ describe("run metrics", () => {
       { position: 0, segment_type: "repeat", distance_km: 0.4, duration_seconds: null, target_pace: "4:30", repeat_count: 6, rest_distance_km: 0.2, rest_duration_seconds: null, rest_pace: "7:00", include_recovery: 0 },
     ]);
     expect(targets.distanceKm).toBeCloseTo(2.4);
+  });
+
+  it("rounds the template total distance to 2 decimal places", () => {
+    const targets = calculateTemplateTargets([
+      { position: 0, segment_type: "warmup", distance_km: 0.1, duration_seconds: null, target_pace: null, repeat_count: null, rest_distance_km: null, rest_duration_seconds: null, rest_pace: null },
+      { position: 1, segment_type: "cooldown", distance_km: 0.2, duration_seconds: null, target_pace: null, repeat_count: null, rest_distance_km: null, rest_duration_seconds: null, rest_pace: null },
+      { position: 2, segment_type: "repeat", distance_km: 0.333, duration_seconds: null, target_pace: null, repeat_count: 3, rest_distance_km: null, rest_duration_seconds: null, rest_pace: null, include_recovery: 0 },
+    ]);
+    expect(targets.distanceKm).toBe(1.3);
   });
 });
