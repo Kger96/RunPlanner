@@ -35,7 +35,7 @@ export function PlannerView({ state, onState, onError }: { state: PlannerState; 
   const planLast = goal ? goal.race_date : todayIso;
   const startDate = clamp(todayIso, planFirst, planLast);
 
-  const [mode, setMode] = useState<Mode>("week");
+  const mode: Mode = state.calendarFormat;
   const [selectedIso, setSelectedIso] = useState(startDate);
   const [addSessionDate, setAddSessionDate] = useState<string | null>(null);
   const [runEntry, setRunEntry] = useState<{ session?: Session; date?: string } | null>(null);
@@ -49,7 +49,11 @@ export function PlannerView({ state, onState, onError }: { state: PlannerState; 
   if (mode === "week") {
     const monday = weekStart(selected);
     cells = Array.from({ length: 7 }, (_, index) => addDays(monday, index));
-    label = `${formatDate(cells[0]!, "short")} - ${formatDate(cells[6]!, "short")} ${cells[6]!.getFullYear()}`;
+    const [start, end] = [cells[0]!, cells[6]!];
+    const dayMonth = (date: Date) => date.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+    const sameMonth = start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear();
+    const startText = sameMonth ? String(start.getDate()) : start.getFullYear() === end.getFullYear() ? dayMonth(start) : `${dayMonth(start)} ${start.getFullYear()}`;
+    label = `${startText} - ${dayMonth(end)} ${end.getFullYear()}`;
   } else {
     const first = new Date(selected.getFullYear(), selected.getMonth(), 1);
     const daysInMonth = new Date(selected.getFullYear(), selected.getMonth() + 1, 0).getDate();
@@ -80,15 +84,11 @@ export function PlannerView({ state, onState, onError }: { state: PlannerState; 
 
   const selectedActivities = activitiesFor(selectedIso);
   const selectedInPlan = selectedIso >= planFirst && selectedIso <= planLast;
-  const heading = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long" }).format(selected);
 
   return <section className="planner">
     <div className="planner-header"><div><p className="eyebrow">ACTIVE PLAN</p><h2>{goal.name}</h2></div></div>
-    <div className="cal-toolbar">
-      <div className="mode-toggle" role="group" aria-label="Calendar mode"><button type="button" aria-pressed={mode === "week"} onClick={() => setMode("week")}>Week</button><button type="button" aria-pressed={mode === "month"} onClick={() => setMode("month")}>Month</button></div>
-      <div className="week-controls"><button type="button" aria-label={`Previous ${mode}`} disabled={prevDisabled} onClick={() => step(-1)}><ChevronLeft /></button><strong className="month-label">{label}</strong><button type="button" aria-label={`Next ${mode}`} disabled={nextDisabled} onClick={() => step(1)}><ChevronRight /></button><button type="button" className="chip-button" onClick={() => setSelectedIso(startDate)}>Today</button></div>
-    </div>
     <div className={`calendar ${mode}`}>
+      <div className="week-controls cal-nav"><button type="button" aria-label={`Previous ${mode}`} disabled={prevDisabled} onClick={() => step(-1)}><ChevronLeft /></button><strong className="month-label">{label}</strong><button type="button" aria-label={`Next ${mode}`} disabled={nextDisabled} onClick={() => step(1)}><ChevronRight /></button></div>
       <div className="cal-grid">
         {DAY_NAMES.map((name) => <div key={name} className="cal-dayname">{name}</div>)}
         {cells.map((day, index) => {
@@ -105,7 +105,6 @@ export function PlannerView({ state, onState, onError }: { state: PlannerState; 
       </div>
     </div>
     <div className="cal-detail">
-      <h3>{heading}</h3>
       {!selectedInPlan && <p className="muted">This date is outside the active plan, so sessions cannot be added.</p>}
       {selectedActivities.map((activity) => <ActivityCard key={activity.key} activity={activity} templates={state.templates} onLog={(session) => setRunEntry({ session })} onState={onState} onError={onError} />)}
       <div className="cal-actions"><button type="button" className="secondary-action" onClick={() => setRunEntry({ date: selectedIso })}>Log a Run</button><button type="button" className="primary-action" disabled={!selectedInPlan} onClick={() => setAddSessionDate(selectedIso)}>Add Session</button></div>

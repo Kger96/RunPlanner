@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { Activity, CalendarDays, Dumbbell, Flag, Settings, Trophy } from "lucide-react";
-import type { PlannerState, Theme } from "./types";
+import type { CalendarFormat, PlannerState, Theme } from "./types";
 import { DashboardView, GoalHistoryView, RunLogView } from "./views";
 import { PlannerView } from "./planner-calendar";
 import { SessionBuilderView } from "./session-builder";
 
 type View = "Dashboard" | "Planner" | "Session builder" | "Run log" | "Goals & history" | "Settings";
 
-const emptyState: PlannerState = { activeGoal: null, goals: [], sessions: [], templates: [], runs: [], theme: "system" };
+const emptyState: PlannerState = { activeGoal: null, goals: [], sessions: [], templates: [], runs: [], theme: "system", calendarFormat: "week" };
 const navItems: { label: View; icon: typeof Activity }[] = [
   { label: "Dashboard", icon: Activity },
   { label: "Planner", icon: CalendarDays },
@@ -35,6 +35,10 @@ export default function App() {
     try { setState(await window.trainingPlanner.setTheme(theme)); } catch { setError("Theme preference could not be saved."); }
   }
 
+  async function setCalendarFormat(format: CalendarFormat) {
+    try { setState(await window.trainingPlanner.setCalendarFormat(format)); } catch { setError("Calendar format could not be saved."); }
+  }
+
   return (
     <main className="app-shell">
       <aside className="sidebar" aria-label="Primary navigation">
@@ -51,10 +55,10 @@ export default function App() {
         {view === "Session builder" && <SessionBuilderView state={state} onState={setState} onError={setError} />}
         {view === "Run log" && <RunLogView state={state} onState={setState} onError={setError} openEntry={openRunEntry} onEntryOpened={() => setOpenRunEntry(false)} />}
         {view === "Goals & history" && <GoalHistoryView state={state} onCreate={() => setView("Dashboard")} onState={setState} onError={setError} />}
-        {view === "Settings" && <SettingsView theme={state.theme} onTheme={setTheme} />}
+        {view === "Settings" && <SettingsView theme={state.theme} onTheme={setTheme} calendarFormat={state.calendarFormat} onCalendarFormat={setCalendarFormat} />}
       </section>
     </main>
   );
 }
 
-function SettingsView({ theme, onTheme }: { theme: Theme; onTheme: (theme: Theme) => void }) { return <section className="settings-view"><h2>Appearance</h2><p>Choose how Training Planner looks on this device.</p><div className="theme-options">{(["system", "light", "dark"] as Theme[]).map((option) => <label key={option}><input type="radio" name="theme" checked={theme === option} onChange={() => onTheme(option)} />{option[0].toUpperCase() + option.slice(1)}</label>)}</div><h2>Local storage</h2><p>Training Planner stores your data only on this device.</p></section>; }
+function SettingsView({ theme, onTheme, calendarFormat, onCalendarFormat }: { theme: Theme; onTheme: (theme: Theme) => void; calendarFormat: CalendarFormat; onCalendarFormat: (format: CalendarFormat) => void }) { return <section className="settings-view"><h2>Appearance</h2><p>Choose how Training Planner looks on this device.</p><div className="theme-options">{(["system", "light", "dark"] as Theme[]).map((option) => <label key={option}><input type="radio" name="theme" checked={theme === option} onChange={() => onTheme(option)} />{option[0].toUpperCase() + option.slice(1)}</label>)}</div><h2>Calendar Format</h2><p>Choose how the planner calendar is shown.</p><div className="theme-options">{(["week", "month"] as CalendarFormat[]).map((option) => <label key={option}><input type="radio" name="calendar-format" checked={calendarFormat === option} onChange={() => onCalendarFormat(option)} />{option[0].toUpperCase() + option.slice(1)}</label>)}</div><h2>Local storage</h2><p>Training Planner stores your data only on this device.</p></section>; }

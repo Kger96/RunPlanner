@@ -1,4 +1,5 @@
 export type Theme = "system" | "light" | "dark";
+export type CalendarFormat = "week" | "month";
 export type SessionStatus = "scheduled" | "completed" | "skipped" | "rescheduled";
 export type SegmentType = "warmup" | "repeat" | "rest" | "cooldown";
 
@@ -82,6 +83,7 @@ export interface PlannerState {
   templates: SessionTemplate[];
   runs: Run[];
   theme: Theme;
+  calendarFormat: CalendarFormat;
 }
 
 export interface GoalInput {
@@ -154,6 +156,7 @@ declare global {
       updateRun: (input: UpdateRunInput) => Promise<PlannerState>;
       deleteRun: (id: number) => Promise<PlannerState>;
       setTheme: (theme: Theme) => Promise<PlannerState>;
+      setCalendarFormat: (format: CalendarFormat) => Promise<PlannerState>;
       cancelPlan: () => Promise<PlannerState>;
       editPlan: (input: EditPlanInput) => Promise<PlannerState>;
     };

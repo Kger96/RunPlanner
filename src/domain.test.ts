@@ -48,6 +48,7 @@ describe("run metrics", () => {
       templates: [],
       runs: [{ id: 1, session_id: 1, completed_date: "2026-08-04", distance_km: 5, duration_seconds: 1500, rpe: null, avg_heart_rate: null, max_heart_rate: null, elevation_m: null, notes: null, is_unplanned: 0 }],
       theme: "system",
+      calendarFormat: "week",
     };
     const metrics = calculateDashboard(state);
     expect(metrics.weeklySeries).toHaveLength(5);

@@ -137,6 +137,10 @@ input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-o
 :root[data-theme="dark"] .segment-breakdown span { color: #c3c0b8; }
 /* Planner calendar */
 .cal-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.cal-nav { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; margin-bottom: 8px; }
+.cal-nav button { grid-column: 1; justify-self: center; }
+.cal-nav button:last-of-type { grid-column: 7; }
+.cal-nav .month-label { grid-column: 2 / 7; min-width: 0; }
 .mode-toggle { display: inline-flex; border: 1px solid #d3cfc7; border-radius: 8px; overflow: hidden; }
 .mode-toggle button { border: 0; background: transparent; padding: 7px 16px; font-weight: 700; color: #5d5a54; cursor: pointer; }
 .mode-toggle button[aria-pressed="true"] { background: #fc4c02; color: #fff; }
@@ -156,7 +160,7 @@ input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-o
 .cal-dot.planned { background: color-mix(in srgb, var(--dot) 30%, transparent); }
 .cal-dot.skipped { background: transparent; opacity: .5; }
 .act-easy { --dot: #2e9e4a; } .act-long { --dot: #2478b8; } .act-tempo { --dot: #d9a400; } .act-interval { --dot: #e0501a; } .act-race { --dot: #7a3fc4; } .act-custom { --dot: #d6408f; } .act-unplanned { --dot: #77736d; }
-.cal-detail { margin-top: 18px; display: grid; gap: 10px; }
+.cal-detail { margin-top: 28px; display: grid; gap: 10px; }
 .cal-detail h3 { margin: 0; font-size: 15px; }
 .activity-card { border-left: 4px solid var(--dot); background: #fff; border-radius: 6px; padding: 12px 14px; box-shadow: 0 0 0 1px #e7e3dc; display: grid; gap: 8px; }
 .activity-card h4 { margin: 0; font-size: 16px; }
@@ -164,7 +168,7 @@ input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-o
 .activity-meta dt { font-size: 11px; color: #76726c; }
 .activity-meta dd { margin: 2px 0 0; font-weight: 700; }
 .activity-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.cal-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.cal-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
 .cal-actions .secondary-action, .cal-actions .primary-action { width: 100%; }
 :root[data-theme="dark"] .mode-toggle { border-color: #44423e; }
 :root[data-theme="dark"] .mode-toggle button { color: #c3c0b8; }

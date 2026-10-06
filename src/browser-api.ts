@@ -1,9 +1,9 @@
-import type { EditPlanInput, Goal, GoalInput, PlannerState, Run, RunInput, Session, SessionInput, SessionTemplate, SessionTemplateInput, Theme, UpdateRunInput, UpdateSessionTemplateInput } from "./types";
+import type { CalendarFormat, EditPlanInput, Goal, GoalInput, PlannerState, Run, RunInput, Session, SessionInput, SessionTemplate, SessionTemplateInput, Theme, UpdateRunInput, UpdateSessionTemplateInput } from "./types";
 
 const storageKey = "training-planner-state-v2";
 const legacyStorageKey = "training-planner-preview-state";
 const storageVersion = 2;
-const emptyState: PlannerState = { activeGoal: null, goals: [], sessions: [], templates: [], runs: [], theme: "system" };
+const emptyState: PlannerState = { activeGoal: null, goals: [], sessions: [], templates: [], runs: [], theme: "system", calendarFormat: "week" };
 
 function normalizeState(value: Partial<PlannerState>): PlannerState {
   return {
@@ -132,6 +132,7 @@ window.trainingPlanner = {
     return writeState({ ...state, runs, sessions: state.sessions.map((session) => reopen && session.id === run.session_id ? { ...session, status: session.original_date ? "rescheduled" : "scheduled" } : session) });
   },
   setTheme: async (theme: Theme) => writeState({ ...readState(), theme }),
+  setCalendarFormat: async (calendarFormat: CalendarFormat) => writeState({ ...readState(), calendarFormat }),
   cancelPlan: async () => {
     const state = readState();
     if (!state.activeGoal) throw new Error("No active plan to cancel.");
