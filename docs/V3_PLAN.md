@@ -45,13 +45,13 @@ The requirements file is slightly stale: M-19 (edit/delete runs) and the week/mo
 
 These affect v3 design and should be fixed early (Phase 0).
 
-1. **`createGoal` wipes sessions.** `sessions: []` in [browser-api.ts](../src/browser-api.ts) deletes all prior sessions when a new goal is created, so "archived plans" keep only a goal row. Runs also have no `goal_id`, so history cannot be attributed to a plan.
+1. **`createGoal` wipes sessions.** `sessions: []` in [local-repository.ts](../src/data/local-repository.ts) (previously `browser-api.ts`) deletes all prior sessions when a new goal is created, so "archived plans" keep only a goal row. Runs also have no `goal_id`, so history cannot be attributed to a plan.
 2. **`nextSession` is unordered.** [domain.ts](../src/domain.ts) takes the first scheduled session in array order, not the earliest upcoming date, and does not exclude past dates.
 3. **Current-week lookup is fragile.** The dashboard finds the current week by comparing formatted date labels instead of date keys.
 4. **Adherence ignores unplanned runs.** `planStatus` counts only session status, contradicting the M-24/M-29 policy.
 5. **Numeric auto-increment IDs** (`max + 1`) are not safe for a multi-device database. v3 needs UUIDs.
 6. **Whole-state snapshot API.** Every command returns the entire `PlannerState`. Fine locally; wasteful over a network. It is also a convenient migration seam (see 3.2).
-7. **Limited test coverage.** Only `domain.test.ts`. There is no coverage of `browser-api.ts` validation, migration or the UI.
+7. **Limited test coverage.** Only `domain.test.ts`. There was no coverage of repository validation or the UI. Phase 1 added both (see below).
 8. **Doc drift.** Some Bugs.md entries still record "not checked manually in a browser".
 
 ---
@@ -124,12 +124,12 @@ Decided (**Q1**): Supabase. You do not need prior experience. The free tier and 
 
 ### 3.3 Frontend seam
 
-`window.trainingPlanner` in [browser-api.ts](../src/browser-api.ts) is already a typed repository boundary. Keep the interface and swap the implementation. The existing views then need little change.
+Phase 1 turned the old `window.trainingPlanner` global into the `PlannerRepository` interface in [repository.ts](../src/data/repository.ts), injected via `useRepository()`. Phase 2 adds a second implementation; the views do not change.
 
 ```
 src/
   data/
-    repository.ts        # PlannerRepository interface (from window.trainingPlanner)
+    repository.ts        # PlannerRepository interface
     local-repository.ts  # current localStorage code; temporary fake for dev/tests, deleted after Phase 2
     supabase-repository.ts
   auth/                  # AuthProvider, LoginView, session hooks
@@ -263,7 +263,7 @@ If you want to keep any v2 plan, re-enter it by hand, or take a copy of the `tra
 - [ ] Strava secret, tokens and webhook verify token are never in the browser, repo or logs.
 - [ ] OAuth `state` parameter validated and single use.
 - [ ] Webhook endpoint checks the `subscription_id` and only acts on known `owner_id` values.
-- [ ] Input validation moved server-side (database constraints and checks), not just `browser-api.ts`.
+- [ ] Input validation moved server-side (database constraints and checks), not just the client-side repository.
 - [ ] CORS and redirect URLs restricted to the production origin and localhost.
 - [ ] Content Security Policy appropriate for GitHub Pages (meta tag) with Supabase and Strava domains allow-listed.
 - [ ] Privacy notice: what is stored, that Strava data is stored, how to export or delete.
@@ -284,7 +284,7 @@ Goal: stable baseline and a safety net before touching persistence.
 - [x] Update [REQUIREMENTS.md](REQUIREMENTS.md) statuses (M-19, M-09, M-06, M-29, S-02, S-05, C-04 now done).
 - [ ] Commit Phase 0 and tag the repo `v2.0.0` (left for you to do).
 - [x] Fix the `domain.ts` issues that survive into v3 (section 1.3, items 2 to 4): next-session ordering and past dates, current-week lookup by date key, unplanned runs in adherence (M-29) with an explanation in the UI. Unit tests added (16 passing).
-- [ ] Issue 1 (archiving) and the run `goal_id` are fixed in the new Supabase schema and repository, not in `browser-api.ts`, which is being retired. Do not invest in the local store.
+- [ ] Issue 1 (archiving) and the run `goal_id` are fixed in the new Supabase schema and repository, not in `local-repository.ts`, which is being retired. Do not invest in the local store.
 - [x] Add a linter, Prettier, a `lint` script and a CI workflow running typecheck, lint, tests, audit and build on pull requests. Oxlint was used instead of ESLint because `typescript-eslint` does not support TypeScript 7. `npm audit fix` cleared 5 dev-dependency advisories.
 - [ ] Manually verify items in Bugs.md flagged "not checked manually" (needs you in a browser).
 
@@ -292,12 +292,19 @@ Goal: stable baseline and a safety net before touching persistence.
 
 ### Phase 1: Repository abstraction and IDs
 
-- [ ] Extract `PlannerRepository` from the `window.trainingPlanner` type; move local code to `local-repository.ts` as a temporary fake; inject through React context rather than a global.
-- [ ] Switch entity IDs to string UUIDs in types (no data migration needed; the local fake can simply reset).
-- [ ] Add a loading state and error/retry UI for async operations (UX-41/42).
-- [ ] Add Playwright smoke tests for create goal, add session, log run, reload, persistence.
+- [x] Extract `PlannerRepository` (`src/data/repository.ts`); local code moved to `src/data/local-repository.ts` as a temporary implementation; injected through React context (`useRepository()`) instead of `window`.
+- [x] Entity IDs are string UUIDs. The local store uses a new key (`training-planner-local-v3`) and ignores v2 data. `SessionTemplateSegment.id` and `RepeatSubSegment.id` stay numeric: they are positions inside a template, not database entities.
+- [x] Loading state and a "Try again" error screen on startup (UX-41/42). Per-command errors still use the existing banner.
+- [x] Playwright smoke tests (`e2e/`) for: empty dashboard, create goal / add session / log run / reload, unplanned run counted and deleted, template reuse, theme persistence, storage-failure retry. Run in CI.
+- [x] Repository unit tests (`src/data/local-repository.test.ts`, 19 tests) cover validation, ID uniqueness, reschedule/skip/reopen, plan edit and cancel cascades, and read/write failures.
 
-**Done when:** the app behaves identically, all tests pass, and no component references `window.trainingPlanner` or `localStorage`.
+**Done when:** the app behaves identically, all tests pass, and no component references `window.trainingPlanner` or `localStorage`. (Only `src/data/local-repository.ts` touches `localStorage`.)
+
+**Notes for Phase 2:**
+
+- The `PlannerRepository` contract returns the whole `PlannerState` from every command. `supabase-repository.ts` can implement each command as a write followed by a re-fetch.
+- `Goal.active` and `Run.is_unplanned` are still numbers (0/1) in the app types; map them from the database's `status` and `source` columns inside the Supabase repository.
+- The local repository is intentionally kept until Supabase works; delete it and its tests then.
 
 ### Phase 2: Supabase, schema and auth
 
@@ -306,7 +313,7 @@ Goal: stable baseline and a safety net before touching persistence.
 - [ ] Disable public sign-ups in Supabase Auth settings.
 - [ ] Write RLS tests (SQL or pgTAP) proving cross-user isolation.
 - [ ] Add `@supabase/supabase-js`, `AuthProvider`, a login screen (magic link), logout in Settings, and a signed-out guard.
-- [ ] Implement `supabase-repository.ts`; remove `browser-api.ts`, the `localStorage` code and the legacy migration once it works.
+- [ ] Implement `supabase-repository.ts`; remove `local-repository.ts` and its tests once it works.
 - [ ] Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to the Pages workflow (as variables, not secrets) and Supabase redirect URLs for the Pages origin and `localhost`.
 - [ ] Update the sidebar copy ("Local data only", "Saved locally") to reflect cloud state and sync status.
 

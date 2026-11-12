@@ -4,7 +4,7 @@ export type SessionStatus = "scheduled" | "completed" | "skipped" | "rescheduled
 export type SegmentType = "warmup" | "repeat" | "rest" | "cooldown";
 
 export interface Goal {
-  id: number;
+  id: string;
   name: string;
   race_date: string;
   plan_start_date: string | null;
@@ -14,8 +14,8 @@ export interface Goal {
 }
 
 export interface Session {
-  id: number;
-  goal_id: number;
+  id: string;
+  goal_id: string;
   scheduled_date: string;
   run_type: string;
   target_distance_km: number;
@@ -25,7 +25,7 @@ export interface Session {
   notes: string | null;
   status: SessionStatus;
   original_date: string | null;
-  template_id: number | null;
+  template_id: string | null;
 }
 
 export interface RepeatSubSegment {
@@ -56,15 +56,15 @@ export interface SessionTemplateSegment {
 }
 
 export interface SessionTemplate {
-  id: number;
+  id: string;
   name: string;
   notes: string | null;
   segments: SessionTemplateSegment[];
 }
 
 export interface Run {
-  id: number;
-  session_id: number | null;
+  id: string;
+  session_id: string | null;
   completed_date: string;
   distance_km: number;
   duration_seconds: number;
@@ -95,7 +95,7 @@ export interface GoalInput {
 }
 
 export interface SessionInput {
-  goalId: number;
+  goalId: string;
   scheduledDate: string;
   runType: string;
   targetDistanceKm: number;
@@ -103,7 +103,7 @@ export interface SessionInput {
   paceLow?: string;
   paceHigh?: string;
   notes?: string;
-  templateId?: number;
+  templateId?: string;
 }
 
 export interface SessionTemplateInput {
@@ -113,11 +113,11 @@ export interface SessionTemplateInput {
 }
 
 export interface UpdateSessionTemplateInput extends SessionTemplateInput {
-  id: number;
+  id: string;
 }
 
 export interface RunInput {
-  sessionId?: number;
+  sessionId?: string;
   completedDate: string;
   distanceKm: number;
   durationSeconds: number;
@@ -129,11 +129,11 @@ export interface RunInput {
 }
 
 export interface UpdateRunInput extends RunInput {
-  id: number;
+  id: string;
 }
 
 export interface EditPlanInput {
-  id: number;
+  id: string;
   name: string;
   raceDate: string;
   planStartDate?: string;
@@ -141,24 +141,3 @@ export interface EditPlanInput {
   targetTime?: string;
 }
 
-declare global {
-  interface Window {
-    trainingPlanner: {
-      getState: () => Promise<PlannerState>;
-      createGoal: (input: GoalInput) => Promise<PlannerState>;
-      createSession: (input: SessionInput) => Promise<PlannerState>;
-      createSessionTemplate: (input: SessionTemplateInput) => Promise<PlannerState>;
-      updateSessionTemplate: (input: UpdateSessionTemplateInput) => Promise<PlannerState>;
-      deleteSessionTemplate: (id: number) => Promise<PlannerState>;
-      rescheduleSession: (input: { id: number; scheduledDate: string }) => Promise<PlannerState>;
-      skipSession: (id: number) => Promise<PlannerState>;
-      logRun: (input: RunInput) => Promise<PlannerState>;
-      updateRun: (input: UpdateRunInput) => Promise<PlannerState>;
-      deleteRun: (id: number) => Promise<PlannerState>;
-      setTheme: (theme: Theme) => Promise<PlannerState>;
-      setCalendarFormat: (format: CalendarFormat) => Promise<PlannerState>;
-      cancelPlan: () => Promise<PlannerState>;
-      editPlan: (input: EditPlanInput) => Promise<PlannerState>;
-    };
-  }
-}

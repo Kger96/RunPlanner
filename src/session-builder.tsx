@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { CopyPlus, Footprints, GripVertical, Pause, Pencil, Plus, SkipForward, Timer, Trash2, Wind, X } from "lucide-react";
+import { useRepository } from "./data/repository-context";
 import { calculateTemplateTargets, formatDuration } from "./domain";
 import type { PlannerState, RepeatSubSegment, SegmentType, Session, SessionInput, SessionTemplate, SessionTemplateInput, SessionTemplateSegment } from "./types";
 
@@ -62,11 +63,12 @@ export function SegmentBreakdown({ segments }: { segments: SessionTemplateSegmen
 }
 
 export function SessionBuilderView({ state, onState, onError }: { state: PlannerState; onState: (state: PlannerState) => void; onError: (message: string) => void }) {
+  const repository = useRepository();
   const [name, setName] = useState("");
   const [notes, setNotes] = useState("");
   const [segments, setSegments] = useState<SessionTemplateSegment[]>([newSegment("warmup", 0), newSegment("repeat", 1), newSegment("cooldown", 2)]);
   const [formError, setFormError] = useState("");
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   // Changing this remounts the segment editors so their local target-mode state matches the loaded data.
   const [formVersion, setFormVersion] = useState(0);
 
@@ -91,7 +93,7 @@ export function SessionBuilderView({ state, onState, onError }: { state: Planner
   async function deleteTemplate(template: SessionTemplate) {
     if (!window.confirm(`Delete the saved session "${template.name}"? Sessions already added to the planner are not affected.`)) return;
     try {
-      onState(await window.trainingPlanner.deleteSessionTemplate(template.id));
+      onState(await repository.deleteSessionTemplate(template.id));
       if (editingId === template.id) resetForm();
     } catch (error) {
       onError(error instanceof Error ? error.message : "The session template could not be deleted.");
@@ -117,7 +119,7 @@ export function SessionBuilderView({ state, onState, onError }: { state: Planner
     setFormError("");
     const input: SessionTemplateInput = { name, notes, segments: segments.map((segment, position) => ({ ...segment, position })) };
     try {
-      onState(editingId === null ? await window.trainingPlanner.createSessionTemplate(input) : await window.trainingPlanner.updateSessionTemplate({ ...input, id: editingId }));
+      onState(editingId === null ? await repository.createSessionTemplate(input) : await repository.updateSessionTemplate({ ...input, id: editingId }));
       resetForm();
     } catch (error) {
       const message = error instanceof Error ? error.message : "The session template could not be saved.";
@@ -240,9 +242,10 @@ function RepeatChildEditor({ child, onChange, onRemove, canRemove }: { child: Re
   );
 }
 
-export function SessionPanelWithTemplates({ session, date, goalId, templates, onClose, onState, onError, onLog }: { session?: Session; date: string; goalId: number; templates: SessionTemplate[]; onClose: () => void; onState: (state: PlannerState) => void; onError: (message: string) => void; onLog: (session: Session) => void }) {
+export function SessionPanelWithTemplates({ session, date, goalId, templates, onClose, onState, onError, onLog }: { session?: Session; date: string; goalId: string; templates: SessionTemplate[]; onClose: () => void; onState: (state: PlannerState) => void; onError: (message: string) => void; onLog: (session: Session) => void }) {
+  const repository = useRepository();
   const [runType, setRunType] = useState(session?.run_type || "Easy");
-  const [templateId, setTemplateId] = useState<number | null>(session?.template_id || null);
+  const [templateId, setTemplateId] = useState<string | null>(session?.template_id || null);
   const [distance, setDistance] = useState(String(session?.target_distance_km || ""));
   const [duration, setDuration] = useState(formatDurationInput(session?.target_duration_seconds || null));
   const [paceLow, setPaceLow] = useState(session?.pace_low || "");
@@ -268,20 +271,20 @@ export function SessionPanelWithTemplates({ session, date, goalId, templates, on
     event.preventDefault();
     try {
       const input: SessionInput = { goalId, scheduledDate, runType, targetDistanceKm: Number(distance || 0), targetDurationSeconds: parseDuration(duration) || undefined, paceLow, paceHigh, notes, templateId: templateId || undefined };
-      onState(await window.trainingPlanner.createSession(input));
+      onState(await repository.createSession(input));
       onClose();
     } catch (error) { onError(error instanceof Error ? error.message : "Session could not be saved."); }
   }
 
   async function reschedule() {
     if (!session) return;
-    try { onState(await window.trainingPlanner.rescheduleSession({ id: session.id, scheduledDate })); onClose(); }
+    try { onState(await repository.rescheduleSession({ id: session.id, scheduledDate })); onClose(); }
     catch (error) { onError(error instanceof Error ? error.message : "Session could not be rescheduled."); }
   }
 
   async function skip() {
     if (!session || !window.confirm(`Mark ${session.run_type} as skipped?`)) return;
-    try { onState(await window.trainingPlanner.skipSession(session.id)); onClose(); }
+    try { onState(await repository.skipSession(session.id)); onClose(); }
     catch (error) { onError(error instanceof Error ? error.message : "Session could not be updated."); }
   }
 
