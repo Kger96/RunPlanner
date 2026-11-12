@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { formatDate, formatDuration, isoDate, weekStart } from "./domain";
 import type { PlannerState, Run, Session, SessionTemplate } from "./types";
+import { useRepository } from "./data/repository-context";
 import { SegmentBreakdown, SessionPanelWithTemplates } from "./session-builder";
 import { RunEntryPanel } from "./views";
 
@@ -115,6 +116,7 @@ export function PlannerView({ state, onState, onError }: { state: PlannerState; 
 }
 
 function ActivityCard({ activity, templates, onLog, onState, onError }: { activity: Activity; templates: SessionTemplate[]; onLog: (session: Session) => void; onState: (state: PlannerState) => void; onError: (message: string) => void }) {
+  const repository = useRepository();
   const [showDetails, setShowDetails] = useState(false);
   const [moving, setMoving] = useState(false);
   const [newDate, setNewDate] = useState(activity.kind === "session" ? activity.session.scheduled_date : "");
@@ -134,11 +136,11 @@ function ActivityCard({ activity, templates, onLog, onState, onError }: { activi
 
   async function skip() {
     if (!window.confirm(`Mark ${session.run_type} as skipped?`)) return;
-    try { onState(await window.trainingPlanner.skipSession(session.id)); } catch (error) { onError(error instanceof Error ? error.message : "Session could not be updated."); }
+    try { onState(await repository.skipSession(session.id)); } catch (error) { onError(error instanceof Error ? error.message : "Session could not be updated."); }
   }
 
   async function reschedule() {
-    try { onState(await window.trainingPlanner.rescheduleSession({ id: session.id, scheduledDate: newDate })); setMoving(false); }
+    try { onState(await repository.rescheduleSession({ id: session.id, scheduledDate: newDate })); setMoving(false); }
     catch (error) { onError(error instanceof Error ? error.message : "Session could not be rescheduled."); }
   }
 

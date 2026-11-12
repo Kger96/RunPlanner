@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Footprints, Pencil, Plus, Trash2, Trophy, X } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { useRepository } from "./data/repository-context";
 import { calculateDashboard, daysUntilRace, formatDate, formatDuration, formatPace, isoDate, parseRunDuration } from "./domain";
 import type { PlannerState, Run, RunInput, Session } from "./types";
 
@@ -53,17 +54,19 @@ export function DashboardView({ state, onState, onPlanner }: { state: PlannerSta
 }
 
 export function RunLogView({ state, onState, onError, openEntry, onEntryOpened }: { state: PlannerState; onState: (state: PlannerState) => void; onError: (message: string) => void; openEntry?: boolean; onEntryOpened?: () => void }) {
+  const repository = useRepository();
   const [entryOpen, setEntryOpen] = useState(false);
   const [editingRun, setEditingRun] = useState<Run | null>(null);
   useEffect(() => { if (openEntry) { setEntryOpen(true); onEntryOpened?.(); } }, [openEntry, onEntryOpened]);
   async function deleteRun(run: Run) {
     if (!window.confirm(`Delete the ${formatDate(run.completed_date, "long")} run? This cannot be undone.`)) return;
-    try { onState(await window.trainingPlanner.deleteRun(run.id)); } catch (reason) { onError(reason instanceof Error ? reason.message : "Run could not be deleted."); }
+    try { onState(await repository.deleteRun(run.id)); } catch (reason) { onError(reason instanceof Error ? reason.message : "Run could not be deleted."); }
   }
   return <section className="run-log"><div className="list-header"><div><p className="eyebrow">ACTIVITY HISTORY</p><h2>Every effort counts.</h2></div><button onClick={() => setEntryOpen(true)}><Plus size={17} />Log a run</button></div>{state.runs.length ? <ul className="run-list">{state.runs.map((run) => <li key={run.id}><div className="activity-icon"><Footprints size={18} /></div><div><strong>{run.is_unplanned ? "Unplanned run" : "Planned workout"}</strong><span>{formatDate(run.completed_date, "long")} · {run.distance_km.toFixed(1)} km · {formatDuration(run.duration_seconds)}</span>{run.notes && <p>{run.notes}</p>}</div><div className="run-stat"><strong>{formatPace(run.distance_km, run.duration_seconds)}</strong><span>/km</span></div><div className="run-actions"><button type="button" className="icon-button" onClick={() => setEditingRun(run)} aria-label="Edit run"><Pencil size={15} /></button><button type="button" className="icon-button" onClick={() => deleteRun(run)} aria-label="Delete run"><Trash2 size={15} /></button></div></li>)}</ul> : <EmptyState title="No runs logged" body="Use Log a run to record a planned or unplanned activity." action={() => setEntryOpen(true)} actionLabel="Log a run" />}{entryOpen && <RunEntryPanel onClose={() => setEntryOpen(false)} onState={onState} onError={onError} />}{editingRun && <RunEntryPanel run={editingRun} onClose={() => setEditingRun(null)} onState={onState} onError={onError} />}</section>;
 }
 
 export function GoalHistoryView({ state, onCreate, onState, onError }: { state: PlannerState; onCreate: () => void; onState: (state: PlannerState) => void; onError: (message: string) => void }) {
+  const repository = useRepository();
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState("");
   const [editPlanStartDate, setEditPlanStartDate] = useState("");
@@ -88,7 +91,7 @@ export function GoalHistoryView({ state, onCreate, onState, onError }: { state: 
 
   async function cancelPlan() {
     if (!window.confirm("Permanently delete the active plan and all associated sessions and runs? This cannot be undone.")) return;
-    try { onState(await window.trainingPlanner.cancelPlan()); }
+    try { onState(await repository.cancelPlan()); }
     catch (error) { onError(error instanceof Error ? error.message : "The plan could not be cancelled."); }
   }
 
@@ -104,7 +107,7 @@ export function GoalHistoryView({ state, onCreate, onState, onError }: { state: 
       if (outsideSessions.length > 0 && !window.confirm("Some planned sessions and logged activities fall outside the new date range and will be permanently deleted. Continue?")) return;
     }
     try {
-      onState(await window.trainingPlanner.editPlan({ id: goal.id, name: editName, raceDate: editRaceDate, planStartDate: editPlanStartDate || undefined, distanceKm: editDistancePreset === "custom" ? Number(editDistanceKm) : Number(editDistancePreset), targetTime: editTargetTime || undefined }));
+      onState(await repository.editPlan({ id: goal.id, name: editName, raceDate: editRaceDate, planStartDate: editPlanStartDate || undefined, distanceKm: editDistancePreset === "custom" ? Number(editDistanceKm) : Number(editDistancePreset), targetTime: editTargetTime || undefined }));
       setEditing(false);
     } catch (error) {
       const msg = error instanceof Error ? error.message : "The plan could not be updated.";
@@ -157,6 +160,7 @@ export function GoalHistoryView({ state, onCreate, onState, onError }: { state: 
 }
 
 function GoalSetup({ onState }: { onState: (state: PlannerState) => void }) {
+  const repository = useRepository();
   const [name, setName] = useState("");
   const [date, setDate] = useState("");
   const [planStartDate, setPlanStartDate] = useState(isoDate(new Date()));
@@ -169,7 +173,7 @@ function GoalSetup({ onState }: { onState: (state: PlannerState) => void }) {
     event.preventDefault();
     const distanceKm = distancePreset === "custom" ? Number(customDistance) : Number(distancePreset);
     try {
-      onState(await window.trainingPlanner.createGoal({ name, raceDate: date, planStartDate, distanceKm, targetTime }));
+      onState(await repository.createGoal({ name, raceDate: date, planStartDate, distanceKm, targetTime }));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Goal could not be saved.");
     }
@@ -202,8 +206,9 @@ function GoalSetup({ onState }: { onState: (state: PlannerState) => void }) {
 }
 
 export function RunEntryPanel({ session, run, defaultDate, onClose, onState, onError }: { session?: Session; run?: Run; defaultDate?: string; onClose: () => void; onState: (state: PlannerState) => void; onError: (message: string) => void }) {
+  const repository = useRepository();
   const [date, setDate] = useState(run?.completed_date ?? defaultDate ?? isoDate(new Date())); const [distance, setDistance] = useState(run ? String(run.distance_km) : String(session?.target_distance_km || "")); const [duration, setDuration] = useState(run ? formatDuration(run.duration_seconds) : ""); const [rpe, setRpe] = useState(run?.rpe ? String(run.rpe) : ""); const [avgHr, setAvgHr] = useState(run?.avg_heart_rate ? String(run.avg_heart_rate) : ""); const [maxHr, setMaxHr] = useState(run?.max_heart_rate ? String(run.max_heart_rate) : ""); const [elevation, setElevation] = useState(run?.elevation_m ? String(run.elevation_m) : ""); const [notes, setNotes] = useState(run?.notes ?? ""); const [error, setError] = useState("");
-  async function save(event: React.FormEvent) { event.preventDefault(); const durationSeconds = parseRunDuration(duration); if (!durationSeconds) { setError("Enter duration as hh:mm:ss, mm:ss or minutes."); return; } try { const input: RunInput = { sessionId: session?.id, completedDate: date, distanceKm: Number(distance), durationSeconds, rpe: rpe ? Number(rpe) : undefined, avgHeartRate: avgHr ? Number(avgHr) : undefined, maxHeartRate: maxHr ? Number(maxHr) : undefined, elevationM: elevation ? Number(elevation) : undefined, notes }; onState(run ? await window.trainingPlanner.updateRun({ ...input, id: run.id }) : await window.trainingPlanner.logRun(input)); onClose(); } catch (reason) { onError(reason instanceof Error ? reason.message : "Run could not be saved."); } }
+  async function save(event: React.FormEvent) { event.preventDefault(); const durationSeconds = parseRunDuration(duration); if (!durationSeconds) { setError("Enter duration as hh:mm:ss, mm:ss or minutes."); return; } try { const input: RunInput = { sessionId: session?.id, completedDate: date, distanceKm: Number(distance), durationSeconds, rpe: rpe ? Number(rpe) : undefined, avgHeartRate: avgHr ? Number(avgHr) : undefined, maxHeartRate: maxHr ? Number(maxHr) : undefined, elevationM: elevation ? Number(elevation) : undefined, notes }; onState(run ? await repository.updateRun({ ...input, id: run.id }) : await repository.logRun(input)); onClose(); } catch (reason) { onError(reason instanceof Error ? reason.message : "Run could not be saved."); } }
   return <aside className="side-panel run-panel" aria-label="Log a run"><header><div><p className="eyebrow">{run ? "EDIT ACTIVITY" : session ? "COMPLETE SESSION" : "UNPLANNED RUN"}</p><h2>{run ? "Edit run" : session ? session.run_type : "Log a run"}</h2></div><button className="icon-button" onClick={onClose} aria-label="Close panel"><X /></button></header>{session && <div className="planned-context">Planned: {session.target_distance_km} km {session.pace_low && `at ${session.pace_low}-${session.pace_high}/km`}</div>}<form onSubmit={save} className="session-form"><label>Completed date<input type="date" value={date} onChange={(event) => setDate(event.target.value)} required /></label><div className="field-row"><label>Actual distance (km)<input type="number" min="0.1" step="0.1" value={distance} onChange={(event) => setDistance(event.target.value)} required /></label><label>Duration (hh:mm:ss)<input placeholder="01:05:30" value={duration} onChange={(event) => setDuration(event.target.value)} required /></label></div><div className="field-row"><label>Perceived effort (1-10)<input type="number" min="1" max="10" value={rpe} onChange={(event) => setRpe(event.target.value)} /></label><label>Elevation gain (m)<input type="number" min="0" value={elevation} onChange={(event) => setElevation(event.target.value)} /></label></div><div className="field-row"><label>Average HR<input type="number" min="1" value={avgHr} onChange={(event) => setAvgHr(event.target.value)} /></label><label>Maximum HR<input type="number" min="1" value={maxHr} onChange={(event) => setMaxHr(event.target.value)} /></label></div><label>Notes<textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="How did it feel?" /></label>{error && <p className="form-error" role="alert">{error}</p>}<button className="primary-action" type="submit">{run ? "Save changes" : "Save run"}</button></form></aside>;
 }
 

@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Activity, CalendarDays, Dumbbell, Flag, Settings, Trophy } from "lucide-react";
+import { useRepository } from "./data/repository-context";
 import type { CalendarFormat, PlannerState, Theme } from "./types";
 import { DashboardView, GoalHistoryView, RunLogView } from "./views";
 import { PlannerView } from "./planner-calendar";
@@ -18,26 +19,39 @@ const navItems: { label: View; icon: typeof Activity }[] = [
 ];
 
 export default function App() {
+  const repository = useRepository();
   const [state, setState] = useState<PlannerState>(emptyState);
   const [view, setView] = useState<View>("Dashboard");
   const [error, setError] = useState("");
   const [openRunEntry, setOpenRunEntry] = useState(false);
+  const [loadStatus, setLoadStatus] = useState<"loading" | "ready" | "failed">("loading");
 
-  useEffect(() => {
-    window.trainingPlanner.getState().then(setState).catch(() => setError("Your local training data could not be opened. Restart the app and try again."));
-  }, []);
+  const load = useCallback(() => {
+    setLoadStatus("loading");
+    repository.getState().then((loaded) => { setState(loaded); setLoadStatus("ready"); }).catch(() => setLoadStatus("failed"));
+  }, [repository]);
+
+  useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = state.theme;
   }, [state.theme]);
 
   async function setTheme(theme: Theme) {
-    try { setState(await window.trainingPlanner.setTheme(theme)); } catch { setError("Theme preference could not be saved."); }
+    try { setState(await repository.setTheme(theme)); } catch { setError("Theme preference could not be saved."); }
   }
 
   async function setCalendarFormat(format: CalendarFormat) {
-    try { setState(await window.trainingPlanner.setCalendarFormat(format)); } catch { setError("Calendar format could not be saved."); }
+    try { setState(await repository.setCalendarFormat(format)); } catch { setError("Calendar format could not be saved."); }
   }
+
+  if (loadStatus !== "ready") return (
+    <main className="load-screen">
+      {loadStatus === "loading"
+        ? <p role="status">Loading your training data…</p>
+        : <div role="alert"><p>Your training data could not be opened.</p><button className="primary-action" onClick={load}>Try again</button></div>}
+    </main>
+  );
 
   return (
     <main className="app-shell">

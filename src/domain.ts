@@ -148,10 +148,11 @@ export function calculateDashboard(state: PlannerState, today = new Date()) {
     },
     nextSession: state.sessions
       .filter((session) => (session.status === "scheduled" || session.status === "rescheduled") && session.scheduled_date >= todayKey)
-      .sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date) || a.id - b.id)[0] || null,
+      .sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date))[0] || null,
     longestRun: state.runs.length ? Math.max(...state.runs.map((run) => run.distance_km)) : 0,
     highestWeek: completedByWeek.length ? Math.max(...completedByWeek) : 0,
-    recentRuns: [...state.runs].sort((first, second) => second.completed_date.localeCompare(first.completed_date) || second.id - first.id).slice(0, 5) as Run[],
+    // Array order is insertion order, so reversing first makes newer runs win date ties.
+    recentRuns: [...state.runs].reverse().sort((first, second) => second.completed_date.localeCompare(first.completed_date)).slice(0, 5) as Run[],
     weeklySeries,
     chartSummary: `Across the active plan from ${formatDate(first, "short")} to ${state.activeGoal ? formatDate(state.activeGoal.race_date, "short") : formatDate(last, "short")}, completed distance ranges from ${Math.min(...completedByWeek).toFixed(1)} to ${Math.max(...completedByWeek).toFixed(1)} kilometres per week.`,
   };

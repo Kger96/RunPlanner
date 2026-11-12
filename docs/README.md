@@ -125,7 +125,7 @@ npm.cmd run build
 - Core workflows operate without accounts, telemetry, cloud synchronization, or a server-side API after the site has loaded.
 - The app automatically saves through a typed browser-storage command layer.
 - Data is scoped to the current browser profile and site origin. Clearing browser site data or opening a different browser creates a separate local data set.
-- Browser-preview data is migrated to the v2 storage key on first use. Existing Electron SQLite data requires a separate export/import migration utility and is not imported automatically.
+- This development branch stores data under a new key (`training-planner-local-v3`) and does not read data saved by v2. Existing Electron SQLite data is not imported.
 
 ## Current Scope
 

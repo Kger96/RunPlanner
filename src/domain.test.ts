@@ -39,14 +39,14 @@ describe("run metrics", () => {
 
   it("builds chart data and plan status across the entire active plan", () => {
     const state: PlannerState = {
-      activeGoal: { id: 1, name: "Autumn race", plan_start_date: "2026-08-03", race_date: "2026-09-06", distance_km: 10, target_time: null, active: 1 },
+      activeGoal: { id: "1", name: "Autumn race", plan_start_date: "2026-08-03", race_date: "2026-09-06", distance_km: 10, target_time: null, active: 1 },
       goals: [],
       sessions: [
-        { id: 1, goal_id: 1, scheduled_date: "2026-08-04", run_type: "Easy", target_distance_km: 5, target_duration_seconds: null, pace_low: null, pace_high: null, notes: null, status: "completed", original_date: null, template_id: null },
-        { id: 2, goal_id: 1, scheduled_date: "2026-08-11", run_type: "Tempo", target_distance_km: 8, target_duration_seconds: null, pace_low: null, pace_high: null, notes: null, status: "scheduled", original_date: null, template_id: null },
+        { id: "1", goal_id: "1", scheduled_date: "2026-08-04", run_type: "Easy", target_distance_km: 5, target_duration_seconds: null, pace_low: null, pace_high: null, notes: null, status: "completed", original_date: null, template_id: null },
+        { id: "2", goal_id: "1", scheduled_date: "2026-08-11", run_type: "Tempo", target_distance_km: 8, target_duration_seconds: null, pace_low: null, pace_high: null, notes: null, status: "scheduled", original_date: null, template_id: null },
       ],
       templates: [],
-      runs: [{ id: 1, session_id: 1, completed_date: "2026-08-04", distance_km: 5, duration_seconds: 1500, rpe: null, avg_heart_rate: null, max_heart_rate: null, elevation_m: null, notes: null, is_unplanned: 0 }],
+      runs: [{ id: "1", session_id: "1", completed_date: "2026-08-04", distance_km: 5, duration_seconds: 1500, rpe: null, avg_heart_rate: null, max_heart_rate: null, elevation_m: null, notes: null, is_unplanned: 0 }],
       theme: "system",
       calendarFormat: "week",
     };
@@ -56,61 +56,61 @@ describe("run metrics", () => {
   });
 
   describe("dashboard rules", () => {
-    const baseSession = { goal_id: 1, run_type: "Easy", target_distance_km: 5, target_duration_seconds: null, pace_low: null, pace_high: null, notes: null, original_date: null, template_id: null };
+    const baseSession = { goal_id: "1", run_type: "Easy", target_distance_km: 5, target_duration_seconds: null, pace_low: null, pace_high: null, notes: null, original_date: null, template_id: null };
     const baseRun = { session_id: null, distance_km: 5, duration_seconds: 1500, rpe: null, avg_heart_rate: null, max_heart_rate: null, elevation_m: null, notes: null, is_unplanned: 1 };
     const state = (overrides: Partial<PlannerState>): PlannerState => ({
-      activeGoal: { id: 1, name: "Race", plan_start_date: "2026-08-03", race_date: "2026-09-06", distance_km: 10, target_time: null, active: 1 },
+      activeGoal: { id: "1", name: "Race", plan_start_date: "2026-08-03", race_date: "2026-09-06", distance_km: 10, target_time: null, active: 1 },
       goals: [], sessions: [], templates: [], runs: [], theme: "system", calendarFormat: "week",
       ...overrides,
     });
 
     it("picks the earliest upcoming session regardless of array order", () => {
       const metrics = calculateDashboard(state({ sessions: [
-        { ...baseSession, id: 1, scheduled_date: "2026-08-20", status: "scheduled" },
-        { ...baseSession, id: 2, scheduled_date: "2026-08-10", status: "scheduled" },
-        { ...baseSession, id: 3, scheduled_date: "2026-08-12", status: "scheduled" },
+        { ...baseSession, id: "1", scheduled_date: "2026-08-20", status: "scheduled" },
+        { ...baseSession, id: "2", scheduled_date: "2026-08-10", status: "scheduled" },
+        { ...baseSession, id: "3", scheduled_date: "2026-08-12", status: "scheduled" },
       ] }), new Date(2026, 7, 5));
-      expect(metrics.nextSession?.id).toBe(2);
+      expect(metrics.nextSession?.id).toBe("2");
     });
 
     it("ignores past, skipped and completed sessions for next session", () => {
       const metrics = calculateDashboard(state({ sessions: [
-        { ...baseSession, id: 1, scheduled_date: "2026-08-04", status: "scheduled" },
-        { ...baseSession, id: 2, scheduled_date: "2026-08-10", status: "skipped" },
-        { ...baseSession, id: 3, scheduled_date: "2026-08-11", status: "completed" },
-        { ...baseSession, id: 4, scheduled_date: "2026-08-15", status: "rescheduled" },
+        { ...baseSession, id: "1", scheduled_date: "2026-08-04", status: "scheduled" },
+        { ...baseSession, id: "2", scheduled_date: "2026-08-10", status: "skipped" },
+        { ...baseSession, id: "3", scheduled_date: "2026-08-11", status: "completed" },
+        { ...baseSession, id: "4", scheduled_date: "2026-08-15", status: "rescheduled" },
       ] }), new Date(2026, 7, 5));
-      expect(metrics.nextSession?.id).toBe(4);
+      expect(metrics.nextSession?.id).toBe("4");
     });
 
     it("returns no next session when everything upcoming is done", () => {
-      expect(calculateDashboard(state({ sessions: [{ ...baseSession, id: 1, scheduled_date: "2026-08-04", status: "scheduled" }] }), new Date(2026, 7, 5)).nextSession).toBeNull();
+      expect(calculateDashboard(state({ sessions: [{ ...baseSession, id: "1", scheduled_date: "2026-08-04", status: "scheduled" }] }), new Date(2026, 7, 5)).nextSession).toBeNull();
     });
 
     it("finds the current week by date, including when two weeks share a label month", () => {
       const metrics = calculateDashboard(state({
-        sessions: [{ ...baseSession, id: 1, scheduled_date: "2026-08-12", status: "scheduled" }],
-        runs: [{ ...baseRun, id: 1, completed_date: "2026-08-12", distance_km: 7 }],
+        sessions: [{ ...baseSession, id: "1", scheduled_date: "2026-08-12", status: "scheduled" }],
+        runs: [{ ...baseRun, id: "1", completed_date: "2026-08-12", distance_km: 7 }],
       }), new Date(2026, 7, 13));
       expect(metrics.thisWeek.plannedKm).toBe(5);
       expect(metrics.thisWeek.completedKm).toBe(7);
     });
 
     it("reports zero this-week values when today is outside the plan", () => {
-      const metrics = calculateDashboard(state({ sessions: [{ ...baseSession, id: 1, scheduled_date: "2026-08-12", status: "scheduled" }] }), new Date(2027, 0, 1));
+      const metrics = calculateDashboard(state({ sessions: [{ ...baseSession, id: "1", scheduled_date: "2026-08-12", status: "scheduled" }] }), new Date(2027, 0, 1));
       expect(metrics.thisWeek).toEqual({ plannedKm: 0, completedKm: 0, percent: 0 });
     });
 
     it("counts unplanned runs inside the plan as completed sessions", () => {
       const metrics = calculateDashboard(state({
         sessions: [
-          { ...baseSession, id: 1, scheduled_date: "2026-08-04", status: "completed" },
-          { ...baseSession, id: 2, scheduled_date: "2026-08-20", status: "scheduled" },
+          { ...baseSession, id: "1", scheduled_date: "2026-08-04", status: "completed" },
+          { ...baseSession, id: "2", scheduled_date: "2026-08-20", status: "scheduled" },
         ],
         runs: [
-          { ...baseRun, id: 1, session_id: 1, is_unplanned: 0, completed_date: "2026-08-04" },
-          { ...baseRun, id: 2, completed_date: "2026-08-06" },
-          { ...baseRun, id: 3, completed_date: "2026-07-01" },
+          { ...baseRun, id: "1", session_id: "1", is_unplanned: 0, completed_date: "2026-08-04" },
+          { ...baseRun, id: "2", completed_date: "2026-08-06" },
+          { ...baseRun, id: "3", completed_date: "2026-07-01" },
         ],
       }), new Date(2026, 7, 5));
       expect(metrics.planStatus).toEqual({ percent: 67, completedRuns: 2, plannedCompleted: 1, unplannedRuns: 1, remainingRuns: 1 });
