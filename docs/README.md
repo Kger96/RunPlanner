@@ -111,7 +111,7 @@ Vite writes the deployable static site to `dist/`.
 
 ## Deployment
 
-The repository includes a GitHub Pages workflow at [.github/workflows/deploy-pages.yml](.github/workflows/deploy-pages.yml). Enable GitHub Actions as the repository's Pages source, then push to `main`. The workflow builds the site with the repository name as its project-site base path and deploys `dist/`.
+The repository includes a GitHub Pages workflow at [.github/workflows/deploy-pages.yml](../.github/workflows/deploy-pages.yml). Enable GitHub Actions as the repository's Pages source, then push to `main`. The workflow builds the site with the repository name as its project-site base path and deploys `dist/`.
 
 For a custom domain or another static host, set the base path before building:
 

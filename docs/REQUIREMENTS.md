@@ -42,12 +42,12 @@ Create a web application that enables an individual runner to manually build a r
 - **M-04** ⚠️: The application shall support one active plan and preserve prior plans as archives.  
   *Changed: When a new goal is created, the prior goal is set to inactive and retained as an archive — this path is implemented correctly. However, the Cancel Plan action permanently deletes the goal and all associated sessions and runs rather than archiving it.*
 - **M-05** ✅: The application shall allow the runner to manually add a planned session to any date in the active plan.
-- **M-06** ⚠️: The primary plan-management view shall be a weekly calendar showing sessions on their scheduled dates.  
-  *Changed: Implemented as a monthly calendar view (C-04 promoted to primary). Navigation moves by month rather than by week.*
+- **M-06** ✅: The primary plan-management view shall be a weekly calendar showing sessions on their scheduled dates.  
+  *Implemented: The Planner offers a week and a month calendar format, selectable in Settings and persisted. Navigation is bounded to the plan dates.*
 - **M-07** ✅: The application shall allow the runner to mark a planned session as skipped while retaining that decision in the plan history.
 - **M-08** ✅: The application shall allow the runner to reschedule a planned session to another date.
-- **M-09** 🔶: The application shall require confirmation before permanently deleting a completed run or plan.  
-  *Partial: Confirmation is shown for cancel plan and when editing plan dates would remove sessions. Individual completed run deletion is not yet implemented (see M-19).*
+- **M-09** ✅: The application shall require confirmation before permanently deleting a completed run or plan.  
+  *Implemented: Confirmation is shown for cancel plan, for run deletion, and when editing plan dates would remove sessions.*
 
 #### Session Definition
 
@@ -64,7 +64,8 @@ Create a web application that enables an individual runner to manually build a r
 - **M-17** ✅: A completed run shall capture date, distance, duration, average pace, perceived effort, average heart rate, maximum heart rate, elevation gain, and free-form notes; fields not known by the runner may be left blank except date, distance, and duration.
 - **M-18** ⚠️: The application shall support partial completion by retaining the planned target and recording actual completed values separately.  
   *Changed: The planned target is displayed as context when logging a run, but there is no explicit partial-completion flag; actual values update the session state without a separate partial record.*
-- **M-19** ❌: The application shall allow the runner to edit a completed run after it has been recorded.
+- **M-19** ✅: The application shall allow the runner to edit a completed run after it has been recorded.  
+  *Implemented: Run log entries have Edit and Delete actions (BUG-20261006-001).*
 - **M-20** ❌: For an interval session, the application shall support actual results for each interval or segment, including actual distance, duration, and pace where applicable.
 - **M-21** ✅: The application shall derive average pace from distance and duration when both values are available and permit an appropriate displayed pace precision for metric running.
 
@@ -79,7 +80,8 @@ Create a web application that enables an individual runner to manually build a r
   *Partial: Session status is visually distinguished in the planner calendar. The dashboard surfaces only the next upcoming session; a full status breakdown is not shown.*
 - **M-28** 🔶: The application shall record and display personal records for fastest times at standard distances, longest single run, and highest weekly distance.  
   *Partial: Longest single run and highest weekly distance are shown on the dashboard. Fastest times at standard distances (5K, 10K, half marathon, marathon) are not tracked.*
-- **M-29** ❌: When an unplanned run is logged, it shall contribute to the headline session-completion metric and its contribution shall be understandable in the dashboard presentation.
+- **M-29** ✅: When an unplanned run is logged, it shall contribute to the headline session-completion metric and its contribution shall be understandable in the dashboard presentation.  
+  *Implemented: Unplanned runs dated within the active plan count as completed sessions in Plan Status, and the card states how many are unplanned.*
 
 #### Persistence and Platform
 
@@ -97,12 +99,11 @@ Create a web application that enables an individual runner to manually build a r
 ### 3.2 Should Have
 
 - **S-01** ❌: The planner should allow a runner to copy or duplicate an existing session to reduce repetitive manual plan creation.
-- **S-02** ✅: The weekly calendar should support navigation to previous and future weeks and visibly distinguish completed, skipped, upcoming, and rescheduled sessions.  
-  *Note: Navigation operates by month rather than week, consistent with the M-06 change.*
+- **S-02** ✅: The weekly calendar should support navigation to previous and future weeks and visibly distinguish completed, skipped, upcoming, and rescheduled sessions.
 - **S-03** ✅: The dashboard should show the active goal name, target date, target distance, optional target time, and days remaining.
 - **S-04** ❌: Charts should offer sensible time windows, such as recent four weeks, current plan, and all history.
-- **S-05** ❌: Personal-record calculations should be recalculated when an affected run is edited or deleted.  
-  *Blocked by M-19 (edit completed run) not being implemented.*
+- **S-05** ✅: Personal-record calculations should be recalculated when an affected run is edited or deleted.  
+  *Implemented: Records are derived from the current run list on every render. Fastest-distance records remain part of M-28.*
 - **S-06** 🔶: The application should validate implausible or incomplete entries, such as a zero distance, negative duration, or a goal date before the plan start date, with clear corrective messages.  
   *Partial: Zero distance and zero/negative duration are validated on run logging and session creation. Not all edge cases are covered.*
 - **S-07** 🔶: The application should retain a visible association between a completed run and its planned workout, including planned-versus-actual values.  
@@ -114,8 +115,8 @@ Create a web application that enables an individual runner to manually build a r
 - **C-01** ❌: Export local data in a documented portable format such as JSON or CSV.
 - **C-02** ❌: Import data previously exported from the application.
 - **C-03** ❌: Create dated local backups and provide a restore workflow.
-- **C-04** ⚠️: Support a monthly calendar or chronological list view alongside the weekly calendar.  
-  *Changed: Implemented as the sole primary plan view rather than an optional addition alongside a weekly view (see M-06).*
+- **C-04** ✅: Support a monthly calendar or chronological list view alongside the weekly calendar.  
+  *Implemented: Month view is available alongside the week view (see M-06).*
 - **C-05** ❌: Track equipment, routes, weather, or location details for logged runs.
 - **C-06** ❌: Add target effort or heart-rate zones to planned sessions.
 - **C-07** ❌: Add pace-trend charts for comparable distances.

@@ -25,8 +25,8 @@ Durations of 1 hour or more are misparsed, producing an incorrect (much shorter)
 
 ### Evidence
 - User report: "When logging an activity it should be possible to enter a duration longer than 59min 59sec. Currently that is the limit and if I enter 1hr or above then this affects the pace calculation etc."
-- Code reference: [views.tsx](src/views.tsx#L273) (`const [minutes, seconds = "0"] = duration.split(":")` only handles two segments; a third segment for hours is dropped).
-- Code reference: [domain.ts](src/domain.ts#L58) (`formatPace` divides the resulting, potentially incorrect, `durationSeconds` by distance).
+- Code reference: [views.tsx](../src/views.tsx#L273) (`const [minutes, seconds = "0"] = duration.split(":")` only handles two segments; a third segment for hours is dropped).
+- Code reference: [domain.ts](../src/domain.ts#L58) (`formatPace` divides the resulting, potentially incorrect, `durationSeconds` by distance).
 
 ### Triage Notes
 - Reproducibility: Always (for any duration entered in an hours-inclusive format)
@@ -61,8 +61,8 @@ Logged activities are displayed as read-only list items with no way to edit or d
 
 ### Evidence
 - User report: "When logging an activity, it should be possible to edit the activity in case any information was entered incorrectly such as date, distance etc. Currently this is not possible so permanently affects the planner history." Confirmed in follow-up that deleting should also be supported.
-- Code reference: [views.tsx](src/views.tsx#L119) (`RunLogView` renders `run-list` items as static text with no edit or delete action).
-- Code reference: [types.ts](src/types.ts#L143) (only `logRun` is defined; no update or delete method for an existing run).
+- Code reference: [views.tsx](../src/views.tsx#L119) (`RunLogView` renders `run-list` items as static text with no edit or delete action).
+- Code reference: [types.ts](../src/types.ts#L143) (only `logRun` is defined; no update or delete method for an existing run).
 
 ### Triage Notes
 - Reproducibility: Always
@@ -98,8 +98,8 @@ The session detail panel only ever shows Target distance, Target duration, Pace 
 
 ### Evidence
 - User report: "When viewing a session from within the planner view the details are always the same. However, if importing a saved session with intervals etc then these must be displayed here... Currently they can only see the target distance."
-- Code reference: [session-builder.tsx](src/session-builder.tsx#L234) (`SessionPanelWithTemplates` session-detail branch renders only the fixed `<dl>` fields; no lookup of `session.template_id` against `templates` or rendering of segments).
-- Code reference: [types.ts](src/types.ts#L27) (`Session.template_id` exists, confirming the link to a template is available but unused in the detail view).
+- Code reference: [session-builder.tsx](../src/session-builder.tsx#L234) (`SessionPanelWithTemplates` session-detail branch renders only the fixed `<dl>` fields; no lookup of `session.template_id` against `templates` or rendering of segments).
+- Code reference: [types.ts](../src/types.ts#L27) (`Session.template_id` exists, confirming the link to a template is available but unused in the detail view).
 
 ### Triage Notes
 - Reproducibility: Always
@@ -134,7 +134,7 @@ The appearance options overflow the appearance block on mobile widths.
 
 ### Evidence
 - User report: "On the settings page when using a mobile device, the appearance options \"System, Light, Dark\" overflow the appearance block."
-- Code reference: [styles.css](src/styles.css#L34) (`.theme-options { display: flex; gap: 10px; ... }`, no `flex-wrap` and not included in any `@media` rule).
+- Code reference: [styles.css](../src/styles.css#L34) (`.theme-options { display: flex; gap: 10px; ... }`, no `flex-wrap` and not included in any `@media` rule).
 
 ### Triage Notes
 - Reproducibility: Unknown
@@ -169,9 +169,9 @@ The leading `0` is not accepted/retained; only the digits after the decimal poin
 
 ### Evidence
 - User report: "When entering a distance value in the session builder it does not currently allow for entering a 0 as the first number. If needing to enter 0.4 then it only accepts the .4 but it should be entered by a 0 first."
-- Code reference: [session-builder.tsx](src/session-builder.tsx#L152) (segment distance input: `value={segment.distance_km || ""}`).
-- Code reference: [session-builder.tsx](src/session-builder.tsx#L173) (repeat-child distance input, same pattern).
-- Code reference: [session-builder.tsx](src/session-builder.tsx#L188) (recovery distance input, same pattern).
+- Code reference: [session-builder.tsx](../src/session-builder.tsx#L152) (segment distance input: `value={segment.distance_km || ""}`).
+- Code reference: [session-builder.tsx](../src/session-builder.tsx#L173) (repeat-child distance input, same pattern).
+- Code reference: [session-builder.tsx](../src/session-builder.tsx#L188) (recovery distance input, same pattern).
 
 ### Triage Notes
 - Reproducibility: Always
@@ -206,9 +206,9 @@ The total distance from `calculateTemplateTargets` is used unrounded to prefill 
 
 ### Evidence
 - User report: "When a session is created and it calculates the total distance of the session. Ensure it is to 2 decimal places maximum. And this 2dp is kept when adding a session to the planner."
-- Code reference: [domain.ts](src/domain.ts#L62) (`calculateTemplateTargets` accumulates `distanceKm` with no rounding).
-- Code reference: [session-builder.tsx](src/session-builder.tsx#L206) (`setDistance(targets.distanceKm ? String(targets.distanceKm) : "")` uses the unrounded total to prefill the session form).
-- Code reference: [views.tsx](src/views.tsx#L109) (planner day cell displays `session.target_distance_km` as saved, with no rounding).
+- Code reference: [domain.ts](../src/domain.ts#L62) (`calculateTemplateTargets` accumulates `distanceKm` with no rounding).
+- Code reference: [session-builder.tsx](../src/session-builder.tsx#L206) (`setDistance(targets.distanceKm ? String(targets.distanceKm) : "")` uses the unrounded total to prefill the session form).
+- Code reference: [views.tsx](../src/views.tsx#L109) (planner day cell displays `session.target_distance_km` as saved, with no rounding).
 
 ### Triage Notes
 - Reproducibility: Always (for templates whose segment math produces more than 2 decimal places)
@@ -243,8 +243,8 @@ The "Saved sessions" list only displays the template name and segment summary as
 
 ### Evidence
 - User report: "On the session builder tab. After a session has been created it currently does not allow you to edit the saved sessions." Confirmed in follow-up that deleting should also be supported.
-- Code reference: [session-builder.tsx](src/session-builder.tsx#L92) (saved-sessions list rendered as static `<li>` text, no edit or delete action).
-- Code reference: [browser-api.ts](src/browser-api.ts#L74) (only `createSessionTemplate` is implemented; no update or delete method).
+- Code reference: [session-builder.tsx](../src/session-builder.tsx#L92) (saved-sessions list rendered as static `<li>` text, no edit or delete action).
+- Code reference: [browser-api.ts](../src/browser-api.ts#L74) (only `createSessionTemplate` is implemented; no update or delete method).
 
 ### Triage Notes
 - Reproducibility: Always

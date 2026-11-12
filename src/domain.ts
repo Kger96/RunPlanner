@@ -106,7 +106,7 @@ function inWeek(date: string, weekStart: Date): boolean {
   return value >= start && value < start + 7 * DAY_MS;
 }
 
-export function calculateDashboard(state: PlannerState) {
+export function calculateDashboard(state: PlannerState, today = new Date()) {
   const { first, last } = state.activeGoal
     ? getPlanWeekRange(state.activeGoal.plan_start_date, state.activeGoal.race_date)
     : { first: getWeekDays()[0], last: getWeekDays()[0] };
@@ -115,15 +115,22 @@ export function calculateDashboard(state: PlannerState) {
     weekStarts.push(week);
   }
   const weeklySeries = weekStarts.map((weekStart) => ({
+    key: isoDate(weekStart),
     label: formatDate(weekStart, "short"),
     planned: sumDistance(state.sessions.filter((session) => inWeek(session.scheduled_date, weekStart) && session.status !== "skipped"), "target_distance_km"),
     completed: sumDistance(state.runs.filter((run) => inWeek(run.completed_date, weekStart)), "distance_km"),
   }));
-  const currentWeek = weekStart(new Date());
-  const current = weeklySeries.find((series) => series.label === formatDate(currentWeek, "short")) || { planned: 0, completed: 0 };
-  const completedPlanRuns = state.sessions.filter((session) => session.status === "completed").length;
+  const currentWeekKey = isoDate(weekStart(today));
+  const current = weeklySeries.find((series) => series.key === currentWeekKey) || { planned: 0, completed: 0 };
+  const plannedCompleted = state.sessions.filter((session) => session.status === "completed").length;
   const remainingPlanRuns = state.sessions.filter((session) => session.status === "scheduled" || session.status === "rescheduled").length;
+  const planStart = state.activeGoal?.plan_start_date || null;
+  const planEnd = state.activeGoal?.race_date || null;
+  // Unplanned runs inside the active plan dates count as completed sessions (M-29).
+  const unplannedRuns = state.runs.filter((run) => run.is_unplanned && (!planStart || run.completed_date >= planStart) && (!planEnd || run.completed_date <= planEnd)).length;
+  const completedPlanRuns = plannedCompleted + unplannedRuns;
   const planRunCount = completedPlanRuns + remainingPlanRuns;
+  const todayKey = isoDate(today);
   const completedByWeek = weeklySeries.map((series) => series.completed);
 
   return {
@@ -135,9 +142,13 @@ export function calculateDashboard(state: PlannerState) {
     planStatus: {
       percent: planRunCount ? Math.round((completedPlanRuns / planRunCount) * 100) : 0,
       completedRuns: completedPlanRuns,
+      plannedCompleted,
+      unplannedRuns,
       remainingRuns: remainingPlanRuns,
     },
-    nextSession: state.sessions.find((session) => session.status === "scheduled" || session.status === "rescheduled") || null,
+    nextSession: state.sessions
+      .filter((session) => (session.status === "scheduled" || session.status === "rescheduled") && session.scheduled_date >= todayKey)
+      .sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date) || a.id - b.id)[0] || null,
     longestRun: state.runs.length ? Math.max(...state.runs.map((run) => run.distance_km)) : 0,
     highestWeek: completedByWeek.length ? Math.max(...completedByWeek) : 0,
     recentRuns: [...state.runs].sort((first, second) => second.completed_date.localeCompare(first.completed_date) || second.id - first.id).slice(0, 5) as Run[],

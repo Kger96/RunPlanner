@@ -42,11 +42,14 @@ Requirements: Node.js 22 or later.
 npm.cmd install
 npm.cmd run dev
 npm.cmd run typecheck
+npm.cmd run lint
 npm.cmd test
 npm.cmd run build
 ```
 
-`npm run dev` starts the Vite web server. `npm run build` creates the static production artifact in `dist/`.
+`npm run dev` starts the Vite web server. `npm run build` creates the static production artifact in `dist/`. `npm run lint` runs Oxlint (`typescript-eslint` does not yet support TypeScript 7). `npm run format` runs Prettier; the existing code has not been bulk-formatted, so format only files you are changing.
+
+The CI workflow ([ci.yml](../.github/workflows/ci.yml)) runs typecheck, lint, tests, `npm audit --audit-level=high` and a production build on every pull request and on pushes to non-`main` branches.
 
 ## GitHub Pages Deployment
 
